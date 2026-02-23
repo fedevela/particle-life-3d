@@ -1,0 +1,39 @@
+ID,Category,Story,phase
+UDG01-01,Runtime start / immediate readiness,"As a user, I want the simulation to start in an interactive state immediately, so I can observe emergent behavior without setup delay.",1
+UDG01-02,Runtime start / immediate readiness,"As a user, I want a sensible seeded/default initial world, so I can begin experimenting right away.",1
+UDG02-01,Pause/resume temporal control,"As a user, I want to pause and resume simulation time instantly, so I can inspect states and continue from the same context.",1
+UDG03-01,Population density / count scaling,"As a user, I want to control particle/agent counts, so I can tune complexity, interaction frequency, and performance.",1
+UDG04-01,Species/type/charge diversity,"As a user, I want to configure the number and composition of species/types/charges, so I can test different diversity regimes.",2
+UDG04-02,Species/type/charge diversity,"As a user, I want to rebalance type distributions (including equalization), so I can run fair behavior comparisons.",2
+UDG05-01,Interaction-rule mechanics,"As a user, I want to switch interaction-rule presets quickly, so I can explore known behavior families.",1
+UDG05-02,Interaction-rule mechanics,"As a user, I want to edit interaction values directly (including matrix-level controls), so I can run precise custom experiments.",3
+UDG05-03,Interaction-rule mechanics,"As a user, I want physically meaningful attraction/repulsion/collision rules, so emergent structures remain believable.",3
+UDG06-01,Template/preset initialization/placement,"As a user, I want to pick templates/presets before placement, so I can initialize scenarios quickly.",2
+UDG06-02,Template/preset initialization/placement,"As a user, I want to define and reuse custom templates, so I can iterate on design patterns efficiently.",3
+UDG07-01,Direct world manipulation,"As a user, I want to add, move, drag, brush, and delete entities directly in the world, so I can sculpt scenarios in real time.",2
+UDG07-02,Direct world manipulation,"As a user, I want continuous placement and disturbance tools (e.g., zap), so I can test resilience and dynamic response.",3
+UDG08-01,Selection/cursor targeting,"As a user, I want clear selection/deselection targeting, so I can modify only intended entities.",2
+UDG08-02,Selection/cursor targeting,"As a user, I want cursor visibility/size/shape controls, so targeting stays accurate across tasks and scales.",2
+UDG09-01,Camera navigation,"As a user, I want smooth pan/zoom/navigation and quick reset/focus actions, so I can inspect both local detail and global structure.",1
+UDG10-01,Visual interpretability,"As a user, I want control over palette/shader/size/trails/overlays, so patterns remain readable across densities and themes.",2
+UDG10-02,Visual interpretability,"As a user, I want context overlays (like influence ranges) during parameter edits, so I can understand visual impact immediately.",2
+UDG11-01,Runtime parameter tuning,"As a user, I want live controls for key simulation parameters, so I can explore outcomes without restarting or editing code.",1
+UDG12-01,Numerical stability / boundaries / timestep,"As a user, I want boundary-mode and timestep controls, so I can test dynamics under different integration constraints.",2
+UDG12-02,Numerical stability / boundaries / timestep,"As a user, I want bounded velocities/damping safeguards, so runs stay stable instead of exploding.",2
+UDG13-01,Performance responsiveness/telemetry/threading,"As a user, I want to tune compute parallelism (e.g., thread count), so I can match available hardware.",3
+UDG13-02,Performance responsiveness/telemetry/threading,"As a user, I want responsive UI while simulation runs, so interaction remains fluid under load.",2
+UDG13-03,Performance responsiveness/telemetry/threading,"As a user, I want telemetry like FPS and entity counts, so I can judge scaling and runtime health.",2
+UDG14-01,Preference persistence,"As a user, I want my app preferences remembered across sessions, so I do not repeat setup every launch.",2
+UDG15-01,Reproducibility (save/load/reset/seed replay),"As a user, I want to save and reload named states, so I can revisit and share exact scenarios.",3
+UDG15-02,Reproducibility (save/load/reset/seed replay),"As a user, I want reset/reseed controls, so I can reproduce runs and compare outcomes consistently.",2
+UDG16-01,Saved-state management UX,"As a user, I want searchable save browsing with visual previews and delete management, so I can maintain a usable experiment library.",3
+UDG17-01,Discoverability/onboarding aids,"As a user, I want in-context onboarding and visible control hints, so I can become productive quickly.",2
+UDG17-02,Discoverability/onboarding aids,"As a user, I want an always-available shortcuts/control reference, so I can learn and recall interactions while working.",2
+UDG18-01,Learning IA/curriculum/resources,"As a user, I want structured learning paths with guided examples, so I can progress from basics to advanced concepts.",3
+UDG18-02,Learning IA/curriculum/resources,"As a user, I want curated references and clean navigation between simulation and learning content, so study and practice stay connected.",3
+UDG19-01,Multi-device/mobile usability,"As a user, I want controls and layouts to work across screen sizes and input modes, so the experience remains usable on desktop and mobile.",3
+UDG20-01,Error handling/recovery resilience,"As a user, I want actionable runtime errors with copyable diagnostics, so I can report and resolve issues quickly.",2
+UDG20-02,Error handling/recovery resilience,"As a user, I want automatic stall detection and safe recovery paths, so I can continue work without full restarts.",3
+UDG21-01,Portability/packaging/distribution,"As a user, I want cross-platform compatibility with stable dependencies, so the app runs consistently across environments.",3
+UDG21-02,Portability/packaging/distribution,"As a user, I want reproducible packaged builds (including Windows), so releases are dependable and repeatable.",3
+UDG22-01,UI interaction safety,"As a user, I want UI panel interactions to be isolated from world input, so adjusting controls never causes accidental world edits.",1

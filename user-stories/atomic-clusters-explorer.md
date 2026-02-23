@@ -1,5 +1,3 @@
-# Atomic Clusters Explorer - User Story Catalog (Initial Pass)
-
 | Story ID | Story Statement | Type | Confidence | Status | Key Evidence |
 | --- | --- | --- | --- | --- | --- |
 | US-001 | As a simulation explorer, I want the tool to start with seeded particles/templates, so that I can explore immediately. | Functional | High | Confirmed | `README.md:13`, `sketch_atomic_clusters_explorer/config.pde:19`, `sketch_atomic_clusters_explorer/particles_manager.pde:10` |

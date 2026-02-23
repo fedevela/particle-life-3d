@@ -1,5 +1,3 @@
-## Particle Life App User Story Catalog (Second Pass)
-
 | Story ID | Story Statement | Actor | Goal | Value | Type | Category Tags | Evidence | Acceptance Signals | Confidence | Status | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | F-01 | As a simulation user, I want to launch an interactive particle-life simulation so that I can observe emergent behavior in real time. | Simulation user | Run simulation | Explore emergent patterns | Functional | simulation, runtime, desktop | `README.md:3`; `README.md:37`; `src/main/java/com/particle_life/app/Main.java:73`; `src/main/java/com/particle_life/app/Main.java:340` | App starts via `./gradlew run`, window opens, particles render and update continuously. | High | Baseline-aligned (inferred) | Core product outcome. |
@@ -28,19 +26,3 @@
 | NF-04 | As an app user, I want stalled physics to be detected and recoverable so that the app can self-heal from hangs without full restart. | App user | Detect and recover from non-reacting physics | Higher runtime resilience | Non-functional | resilience, fault-recovery, runtime-health | `src/main/java/com/particle_life/app/Main.java:995`; `src/main/java/com/particle_life/app/Main.java:1005`; `src/main/java/com/particle_life/app/Main.java:1013` | After threshold breach, modal appears; Reset Physics reconstructs physics and restarts loop. | High | New in second pass | Found via deeper pass in modal/recovery flow. |
 | NF-05 | As a developer-user, I want to run the app across OS/architectures with auto-resolved toolchains and native libraries so that setup friction stays low. | Developer-user | Cross-platform execution | Better portability | Non-functional | portability, build, dependency-management | `README.md:23`; `settings.gradle.kts:2`; `settings.gradle.kts:3`; `build.gradle.kts:133`; `build.gradle.kts:162` | Build resolves matching JDK/toolchain and native bindings for current platform without manual dependency rewiring. | Medium | New in second pass | Derived from build/toolchain and natives-selection logic. |
 | NF-06 | As a release engineer, I want a reproducible Windows distributable (zip + exe + bundled JRE) so that end users can run the app without local Java setup. | Release engineer | Package release artifact | Easier distribution | Non-functional | packaging, release, windows | `README.md:53`; `README.md:62`; `build.gradle.kts:11`; `build.gradle.kts:43`; `build.gradle.kts:83`; `build.gradle.kts:101` | Running `zipApp` produces `build/zipApp/particle-life-app.zip` containing app resources, executable, and runtime. | High | New in second pass | Explicitly grounded in release instructions + Gradle tasks. |
-
-## New stories added in second pass
-
-- Added 5 stories beyond the inferred 20-story baseline: `F-19`, `F-20`, `NF-04`, `NF-05`, and `NF-06` (with deeper evidence on save-state internals and runtime/release resilience).
-
-## Unresolved questions
-
-- The prior 20-story baseline artifact was not present in this repository; deduplication was performed against an inferred baseline from implemented behavior.
-- It is unclear whether "sharing" saved `.zip` states is an explicit product intent or an implied capability from file format design.
-- Save loading currently tolerates missing ZIP entries, but error expectations for mismatched matrix/type combinations are documented as potentially problematic (`src/main/java/com/particle_life/app/Main.java:1309`).
-
-## Recommended follow-up validation
-
-- Compare this catalog to the original baseline document (if stored outside repo) and explicitly mark exact deltas.
-- Execute manual validation for `F-19`/`F-20` and `NF-04` in-app: create save, load, delete, and simulate an unresponsive physics scenario.
-- Add a lightweight regression checklist that maps each story ID to a reproducible interaction script.
