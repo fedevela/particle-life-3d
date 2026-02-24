@@ -58,10 +58,10 @@ function toRequiredString(value: unknown, context: string) {
  *
  * @returns Returns a live list of validated sprite entities.
  */
-export function useSprites() {
+export function useSprites(projectId: string) {
   const querySprites = useCallback(async () => {
     try {
-      const rows = await fetchSprites();
+      const rows = await fetchSprites(projectId);
       logger.debug("Map fetched sprite rows.", { rowCount: rows.length });
 
       // Convert persistence rows into strictly validated scene entities.
@@ -91,7 +91,7 @@ export function useSprites() {
       });
       throw toError(error, "Failed to load sprites.");
     }
-  }, []);
+  }, [projectId]);
 
   return useLiveTableQuery("sprites", querySprites, [] as SpriteEntity[]);
 }

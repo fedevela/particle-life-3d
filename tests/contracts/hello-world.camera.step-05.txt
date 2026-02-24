@@ -1,0 +1,7 @@
+[sprites]
+count=1
+0|sphere|0.000000|0.000000|0.000000|{"color":"#93c5fd"}
+
+[variables]
+count=1
+0|camera_state|{"position":[3.5539402991448323,5.191425828986827,5.330910448717249],"target":[0,0,0]}

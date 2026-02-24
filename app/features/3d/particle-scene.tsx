@@ -1,9 +1,18 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 
-import { CameraPersistenceControls } from "~/features/3d/camera-persistence-controls";
+import {
+  CameraPersistenceControls,
+  type CameraPersistenceTestApi,
+} from "~/features/3d/camera-persistence-controls";
 import type { SpriteEntity } from "~/db/types";
 import { useSprites } from "~/hooks/use-sprites";
+
+/** Define scene props used by runtime and test wiring. */
+type ParticleSceneProps = {
+  projectId: string;
+  onCameraTestApiReady?: (api: CameraPersistenceTestApi | null) => void;
+};
 
 /** Create a reusable procedural sphere texture used by sprite materials. */
 function createSphereTexture() {
@@ -50,8 +59,8 @@ function SphereMesh({ sprite, texture }: { sprite: SpriteEntity; texture: THREE.
  *
  * @returns Returns scene nodes mounted inside the Three.js canvas.
  */
-export function ParticleScene() {
-  const sprites = useSprites();
+export function ParticleScene({ projectId, onCameraTestApiReady }: ParticleSceneProps) {
+  const sprites = useSprites(projectId);
   const sphereTexture = useMemo(() => createSphereTexture(), []);
 
   for (const sprite of sprites) {
@@ -69,7 +78,7 @@ export function ParticleScene() {
       {sprites.map((sprite, index) => (
         <SphereMesh key={`${sprite.id}-${index}`} sprite={sprite} texture={sphereTexture} />
       ))}
-      <CameraPersistenceControls />
+      <CameraPersistenceControls projectId={projectId} onTestApiReady={onCameraTestApiReady} />
     </>
   );
 }

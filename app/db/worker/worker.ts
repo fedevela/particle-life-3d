@@ -113,6 +113,28 @@ function resolveSpriteId(candidateId: string | undefined, context: string) {
   return assertUuidV4(crypto.randomUUID(), `${context} generated id`);
 }
 
+/** Seed one default sprite for projects with no persisted sprites yet. */
+function ensureProjectSeeded(repository: SqliteRepository, projectId: string) {
+  const spriteCount = repository.readSpriteCount(projectId);
+
+  if (spriteCount > 0) {
+    return;
+  }
+
+  logger.info("Seed initial sprite for project.", { projectId });
+  repository.insertSprite(
+    {
+      id: assertUuidV4(crypto.randomUUID(), "seeded sprite id"),
+      type: "sphere",
+      pos_x: 0,
+      pos_y: 0,
+      pos_z: 0,
+      metadata: stringifyJson({ color: SEEDED_SPRITE_COLOR }, "sprite metadata"),
+    },
+    projectId,
+  );
+}
+
 /** Initialize sqlite-wasm + OPFS and ensure schema/seed data exist. */
 async function initializeDatabase() {
   if (sqliteRepository && sqliteDb) {
@@ -143,22 +165,6 @@ async function initializeDatabase() {
   const repository = new SqliteRepository(db);
   repository.ensureSchema();
   logger.debug("Ensure SQLite schema.");
-
-  const spriteCount = repository.readSpriteCount();
-  logger.info("Read existing sprite count.", { spriteCount });
-
-  // Seed a default sphere so the first load always has visible content.
-  if (spriteCount === 0) {
-    logger.info("Seed initial sprite because database is empty.");
-    repository.insertSprite({
-      id: assertUuidV4(crypto.randomUUID(), "seeded sprite id"),
-      type: "sphere",
-      pos_x: 0,
-      pos_y: 0,
-      pos_z: 0,
-      metadata: stringifyJson({ color: SEEDED_SPRITE_COLOR }, "sprite metadata"),
-    });
-  }
 
   sqliteDb = db;
   sqliteRepository = repository;
@@ -191,9 +197,11 @@ async function handleRequest(message: WorkerRequest) {
     }
     case "GET_SPRITES": {
       const repository = await getWorkerRepository();
-      const sprites = repository.fetchSprites();
+      ensureProjectSeeded(repository, message.projectId);
+      const sprites = repository.fetchSprites(message.projectId);
       logger.debug("Return sprites from repository.", {
         requestId: message.requestId,
+        projectId: message.projectId,
         spriteCount: sprites.length,
       });
 
@@ -220,17 +228,18 @@ async function handleRequest(message: WorkerRequest) {
         metadata,
       };
 
-      const existingId = repository.findSpriteId(recordId);
+      const existingId = repository.findSpriteId(recordId, message.projectId);
       const operation = existingId !== null ? "update" : "insert";
 
       if (existingId !== null) {
-        repository.updateSprite(nextRecord);
+        repository.updateSprite(nextRecord, message.projectId);
       } else {
-        repository.insertSprite(nextRecord);
+        repository.insertSprite(nextRecord, message.projectId);
       }
 
       logger.info("Persist single sprite.", {
         requestId: message.requestId,
+        projectId: message.projectId,
         spriteId: recordId,
         operation,
       });
@@ -264,13 +273,13 @@ async function handleRequest(message: WorkerRequest) {
           metadata,
         };
 
-        const existingId = repository.findSpriteId(recordId);
+        const existingId = repository.findSpriteId(recordId, message.projectId);
 
         if (existingId !== null) {
-          repository.updateSprite(nextRecord);
+          repository.updateSprite(nextRecord, message.projectId);
           updateCount += 1;
         } else {
-          repository.insertSprite(nextRecord);
+          repository.insertSprite(nextRecord, message.projectId);
           insertCount += 1;
         }
 
@@ -283,6 +292,7 @@ async function handleRequest(message: WorkerRequest) {
 
       logger.info("Persist sprite batch.", {
         requestId: message.requestId,
+        projectId: message.projectId,
         patchSize: message.payload.length,
         persistedCount: persistedRecords.length,
         insertCount,
@@ -299,11 +309,12 @@ async function handleRequest(message: WorkerRequest) {
     }
     case "GET_CAMERA_STATE": {
       const repository = await getWorkerRepository();
-      const cameraVariable = repository.findVariableByName(CAMERA_STATE_NAME);
+      const cameraVariable = repository.findVariableByName(CAMERA_STATE_NAME, message.projectId);
 
       const parsed = cameraVariable ? parseCameraState(cameraVariable.value) : null;
       logger.debug("Return camera state.", {
         requestId: message.requestId,
+        projectId: message.projectId,
         hasCameraState: parsed !== null,
       });
 
@@ -318,7 +329,7 @@ async function handleRequest(message: WorkerRequest) {
     case "SAVE_CAMERA_STATE": {
       const repository = await getWorkerRepository();
 
-      const existing = repository.findVariableByName(CAMERA_STATE_NAME);
+      const existing = repository.findVariableByName(CAMERA_STATE_NAME, message.projectId);
 
       const record: VariableRecord = {
         id: existing !== null ? existing.id : crypto.randomUUID(),
@@ -327,16 +338,49 @@ async function handleRequest(message: WorkerRequest) {
       };
 
       if (existing) {
-        repository.updateVariableValue(record);
+        repository.updateVariableValue(record, message.projectId);
       } else {
-        repository.insertVariable(record);
+        repository.insertVariable(record, message.projectId);
       }
 
       logger.info("Persist camera state.", {
         requestId: message.requestId,
+        projectId: message.projectId,
         operation: existing ? "update" : "insert",
       });
 
+      emitTableUpdated("variables");
+
+      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      return;
+    }
+    case "GET_PROJECT_CONTRACT_TEXT": {
+      const repository = await getWorkerRepository();
+      ensureProjectSeeded(repository, message.projectId);
+      const contractText = repository.getProjectContractText(message.projectId, message.scope ?? "all");
+      logger.debug("Return project contract text.", {
+        requestId: message.requestId,
+        projectId: message.projectId,
+        scope: message.scope ?? "all",
+      });
+
+      postMessageToMain({
+        type: "RESPONSE",
+        requestId: message.requestId,
+        ok: true,
+        data: contractText,
+      });
+      return;
+    }
+    case "DELETE_PROJECT_DATA": {
+      const repository = await getWorkerRepository();
+      repository.deleteProjectData(message.projectId);
+      logger.info("Delete project data.", {
+        requestId: message.requestId,
+        projectId: message.projectId,
+      });
+
+      emitTableUpdated("sprites");
       emitTableUpdated("variables");
 
       postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });

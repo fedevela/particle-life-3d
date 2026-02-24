@@ -1,55 +1,60 @@
-# E2E Implementation Instructions: DB-Contract Testing for Hello World
+# E2E Implementation Instructions: Raw DB-Text Contract Testing (Hello World)
 
 ## Goal
 
-Implement deterministic, contract-driven end-to-end testing for the current `hello-world` scene using Playwright, validating only database state (plain text contract output), including:
+Implement Playwright end-to-end testing for the current `hello-world` scene using only database text contracts.
 
-- initial sprite state (one seeded sprite),
-- camera persistence state,
-- camera action coverage for 10 basic movements.
+The test suite must validate:
 
-## Non-Goals
+- one seeded sprite in DB,
+- persisted camera state in DB,
+- the 10 basic camera actions.
 
-Do **not** implement any of the following:
+## Hard Rules
 
-- frame-loop override or clock override,
-- simulation fast-forward/backward sequencing,
-- `window.__IS_AWAITING_DB__`,
-- canvas screenshot/pixel/baseline comparisons,
-- visual snapshot contracts.
+- Do not implement frame-loop overrides, clock overrides, or fast-forward/backward simulation.
+- Do not use `window.__IS_AWAITING_DB__`.
+- Do not add canvas/image/pixel/snapshot assertions.
+- Do not add response-shaping, parsing, normalization, or validation logic for DB contract text.
+- Treat DB text as the source of truth: fetch text, save fixture text, compare text directly.
 
-## Required Behaviors
+## Core Approach
 
-1. Tests must be project-isolated via `projectId` so parallel tests do not interfere.
-2. App test mode is enabled by URL query params.
-3. Test assertions compare deterministic plain-text DB contract output to fixture text.
-4. Camera movements are triggered through a deterministic test API path (not flaky UI gestures).
-5. Tests wait on real persistence completion (promise-based), not arbitrary sleeps.
+1. Run app in `testMode` using URL params.
+2. Use project-scoped data (`projectId`) for isolation.
+3. Expose test APIs on `window`.
+4. For each test step:
+   - call test API,
+   - get raw DB contract text,
+   - compare it directly to fixture text.
 
----
-
-## Runtime Test Mode and URL Params
-
-Use route URL params:
-
-- `testMode=true|false`
-- `projectId=<string>`
-- `seed=<string>` (optional now; reserved for deterministic randomness integration)
-
-Recommended route for tests:
-- `/hello-world?testMode=true&projectId=<unique>&seed=<value>`
+No extra handling of DB response content.
 
 ---
 
-## Test API Path (Window Globals)
+## Runtime Params
 
-Expose globals only when `testMode=true`:
+Use query params:
 
-- `window.__GET_DB_CONTRACT_TEXT__(projectId?: string, scope?: "all" | "sprites" | "variables"): Promise<string>`
-- `window.__APPLY_CAMERA_ACTION_FOR_TEST__(action: CameraAction, projectId?: string): Promise<{ position: [number, number, number]; target: [number, number, number] }>`
+- `testMode=true`
+- `projectId=<unique-id>`
+- `seed=<string>` (optional)
+
+Test URL example:
+
+`/hello-world?testMode=true&projectId=<unique-id>&seed=hello`
+
+---
+
+## Required Test APIs (Window Globals)
+
+Expose only when `testMode=true`:
+
+- `window.__GET_DB_CONTRACT_TEXT__(projectId?: string): Promise<string>`
+- `window.__APPLY_CAMERA_ACTION_FOR_TEST__(action: CameraAction, projectId?: string): Promise<void>`
 - `window.__DELETE_PROJECT_DATA__(projectId?: string): Promise<void>`
 
-`CameraAction` values (10 total):
+`CameraAction` values:
 
 1. `zoom_in`
 2. `zoom_out`
@@ -62,187 +67,99 @@ Expose globals only when `testMode=true`:
 9. `pan_up`
 10. `pan_down`
 
-### Contract for `__APPLY_CAMERA_ACTION_FOR_TEST__`
+Notes:
 
-- Applies camera/control movement in deterministic increments.
-- Calls persistence through existing DB bridge path.
-- Awaits DB persistence completion before returning.
-- Returns resulting camera `{position, target}` for optional debugging.
+- `__APPLY_CAMERA_ACTION_FOR_TEST__` must persist through the real DB pipeline and resolve only after persistence completes.
+- `__GET_DB_CONTRACT_TEXT__` must return DB text as-is, with no post-processing.
 
 ---
 
-## Project Isolation and Persistence Scope
+## Project Isolation
 
-### Requirement
+All reads/writes used by e2e must be scoped by `projectId`.
 
-All persisted reads/writes used by tests must be scoped by `projectId`.
+Implementation options (pick one and use consistently):
 
-### Strategy
+- add `project_id` columns and query filters,
+- or keep schema and scope keys/names by `projectId`.
 
-- Add `project_id` support for sprite data.
-- Scope camera persistence by project without broad risky migration:
-  - either `variables.project_id`,
-  - or stable scoped variable name convention, e.g. `camera_state::<projectId>`.
+Expected behavior:
 
-Use one approach consistently across bridge/worker/repository.
-
-### Seeded Sprite Behavior
-
-On first load for a given `projectId`, if no sprite exists for that project, seed exactly one sprite at origin.
+- each test project is isolated,
+- one default sprite is seeded per new project,
+- camera state is scoped per project.
 
 ---
 
-## Exact Contract-Text Formatting Function Spec
+## Raw Contract Text Requirement
 
-Implement DB exporter in worker/repository with deterministic byte-stable output.
+The database layer must provide one plain-text contract string representing project state.
 
-### Function
+Important:
 
-`getProjectContractText(projectId: string, scope: "all" | "sprites" | "variables" = "all"): string`
+- do not parse/normalize/canonicalize the text in app test APIs,
+- do not transform text in Playwright assertions,
+- do not “handle” DB response beyond awaiting and returning the raw text string.
 
-### Validation Rules
+Test behavior:
 
-- `projectId` must be non-empty after trimming.
-- Throw on malformed/non-finite numeric values.
-- Query only rows for this `projectId`.
-
-### Field Normalization Rules
-
-#### Number formatting
-
-- Use `toFixed(6)`.
-- Normalize `-0.000000` to `0.000000`.
-
-#### JSON canonicalization
-
-For `metadata` and variable `value`:
-
-- If valid JSON:
-  - recursively sort object keys lexicographically,
-  - preserve array order,
-  - serialize compact (`JSON.stringify` no spaces).
-- If not valid JSON:
-  - keep raw string unchanged.
-
-#### Field escaping
-
-Apply in order:
-
-- `\` -> `\\`
-- `|` -> `\|`
-- newline (`\n`) -> `\\n`
-
-### Sorting Rules
-
-#### Sprites section sort key
-
-`(type, xFormatted, yFormatted, zFormatted, metadataCanonicalEscaped)`
-
-#### Variables section sort key
-
-`(nameEscaped, valueCanonicalEscaped)`
-
-### Output Format (LF only, no trailing newline)
-
-If `scope = "all"`:
-
-```txt
-[sprites]
-count=<N>
-0|<type>|<x>|<y>|<z>|<metadata>
-1|...
-
-[variables]
-count=<M>
-0|<name>|<value>
-1|...
-```
-
-If `scope = "sprites"`: output only `[sprites]` block.  
-If `scope = "variables"`: output only `[variables]` block.
-
-### Determinism Constraints
-
-Do **not** include:
-
-- IDs/UUIDs,
-- rowid,
-- timestamps,
-- nondeterministic fields.
-
-Same DB state must produce byte-identical text across runs.
+- read raw text,
+- save raw text to fixture,
+- assert raw text equals fixture text.
 
 ---
 
-## Camera State Coverage Plan (10 Actions)
-
-Use test API path to avoid flaky pointer simulation while still persisting via real DB pipeline.
-
-For each action:
-
-1. call `__APPLY_CAMERA_ACTION_FOR_TEST__(action, projectId)`,
-2. call/poll `__GET_DB_CONTRACT_TEXT__(projectId, "all")`,
-3. assert exact match against corresponding fixture.
-
-Recommended deterministic increments (implementation constants):
-
-- zoom delta: fixed scalar,
-- orbit delta: fixed angle in radians,
-- pan delta: fixed world-space amount.
-
-Keep constants stable and shared across implementation/tests.
-
----
-
-## Playwright Test Suite Plan
+## Playwright Suite Plan
 
 ### Files
 
 - `playwright.config.ts`
 - `tests/hello-world.contract.spec.ts`
 - `tests/contracts/hello-world.initial.txt`
-- `tests/contracts/hello-world.camera.step-01.txt` ... `step-10.txt` (or a naming variant with action names)
+- `tests/contracts/hello-world.camera.step-01.txt` ... `tests/contracts/hello-world.camera.step-10.txt`
 
-### Test Flow
+### Test flow
 
-1. Generate unique `projectId` per test.
-2. Navigate to hello-world URL with `testMode=true`.
-3. Assert initial contract fixture:
-   - one seeded sprite at origin,
-   - no camera state row yet (or expected default, based on implementation choice).
-4. Execute 10 camera actions in defined order via test API path.
-5. After each action, assert full contract equals fixture.
-6. Cleanup project data via `__DELETE_PROJECT_DATA__`.
+1. Create unique `projectId`.
+2. Open hello-world in test mode.
+3. Fetch raw DB contract text and assert against initial fixture.
+4. Execute 10 camera actions in order via `__APPLY_CAMERA_ACTION_FOR_TEST__`.
+5. After each action, fetch raw DB contract text and assert against matching fixture.
+6. Cleanup project data.
 
-### Synchronization
+### Assertion style
 
-- Primary: await promises returned by test APIs.
-- Secondary safety: `expect.poll` around contract fetch.
-- Avoid fixed sleeps (`waitForTimeout`) except temporary debugging.
-
----
-
-## Playwright-CLI Usage (During Development)
-
-Use `playwright-cli` for manual verification while implementing:
-
-- open route with test params,
-- run-code/eval to invoke test globals,
-- inspect returned camera state and contract text quickly.
-
-Example workflow:
-
-1. Open page with test mode and project id.
-2. Evaluate `window.__GET_DB_CONTRACT_TEXT__(...)`.
-3. Apply a camera action via `window.__APPLY_CAMERA_ACTION_FOR_TEST__(...)`.
-4. Re-read contract and verify change.
-5. Cleanup via `window.__DELETE_PROJECT_DATA__(...)`.
-
-Note: final pass/fail remains in `@playwright/test` specs.
+- Strict string equality only.
+- No JSON conversion.
+- No row parsing.
+- No custom normalization.
 
 ---
 
-## Expected File Touch Points
+## Timing and Synchronization
+
+- Use promise-based synchronization from test APIs.
+- `__APPLY_CAMERA_ACTION_FOR_TEST__` resolves after DB write is complete.
+- Tests may use `expect.poll` for robustness, but still compare raw text only.
+- Avoid fixed sleep timers as primary sync.
+
+---
+
+## Playwright-CLI Usage
+
+Use `playwright-cli` during implementation for quick manual checks:
+
+1. open test URL,
+2. call `window.__GET_DB_CONTRACT_TEXT__` via `run-code`,
+3. call `window.__APPLY_CAMERA_ACTION_FOR_TEST__`,
+4. read DB text again,
+5. copy raw text into fixture when needed.
+
+Final verification still comes from `@playwright/test`.
+
+---
+
+## Expected Files to Update
 
 - `app/features/3d/particle-page.tsx`
 - `app/features/3d/camera-persistence-controls.tsx`
@@ -254,45 +171,24 @@ Note: final pass/fail remains in `@playwright/test` specs.
 - `playwright.config.ts`
 - `tests/hello-world.contract.spec.ts`
 - `tests/contracts/*`
-- `package.json` (scripts + playwright dev dependency)
+- `package.json`
 
 ---
 
-## Suggested Scripts
+## Scripts
 
-Add npm scripts:
+Add scripts:
 
-- `test:e2e`: run Playwright tests
-- `test:e2e:hello-world`: run only hello-world contract spec
-
----
-
-## Verification Checklist
-
-1. Typecheck passes.
-2. Hello-world e2e contract spec passes locally.
-3. Contract output is deterministic between repeated runs.
-4. Tests pass with parallel workers due to project isolation.
-5. No non-goal mechanisms were introduced (frame override, visual baseline, etc.).
+- `test:e2e`
+- `test:e2e:hello-world`
 
 ---
 
 ## Acceptance Criteria
 
-- Visiting hello-world with `testMode=true` exposes required test globals.
-- Initial contract validates one seeded sprite in project scope.
-- Camera contract updates persist deterministically for all 10 actions.
-- Fixtures are strict-equality matched as plain text.
-- Tests are stable and green without arbitrary waits.
-
----
-
-## Notes on Timing Races
-
-Persistence races are avoided by design when the test API:
-
-- applies a camera action,
-- awaits DB persistence completion,
-- only then resolves.
-
-This is more reliable than waiting fixed debounce durations.
+- Hello-world in `testMode` exposes required test APIs.
+- DB contract text is fetched as raw text.
+- Fixture text is raw saved DB text.
+- Tests compare raw DB text to fixture text directly.
+- One sprite and camera-state coverage for all 10 actions are validated.
+- Tests pass reliably with project isolation.

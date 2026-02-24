@@ -1,5 +1,11 @@
 import type { CameraState, SpriteRecord, SpriteUpsertInput } from "~/db/types";
-import type { DbTable, WorkerEvent, WorkerRequest, WorkerResponse } from "~/db/worker/messages";
+import type {
+  ContractScope,
+  DbTable,
+  WorkerEvent,
+  WorkerRequest,
+  WorkerResponse,
+} from "~/db/worker/messages";
 import { createLogger } from "~/lib/logger";
 import { assertUuidV4 } from "~/lib/uuid";
 
@@ -22,6 +28,8 @@ let initPromise: Promise<void> | null = null;
 const pendingRequests = new Map<string, PendingRequest>();
 /** Track per-table listeners for worker table update events. */
 const tableListeners = new Map<DbTable, Set<() => void>>();
+/** Define the localStorage key that holds the default UI project id. */
+const UI_PROJECT_ID_STORAGE_KEY = "particle-life:ui-project-id";
 
 /** Convert unknown failures into Error objects with a fallback message. */
 function toError(error: unknown, fallbackMessage: string) {
@@ -45,6 +53,37 @@ function assertBrowser() {
   if (typeof window === "undefined") {
     throw new Error("Database bridge is only available in the browser.");
   }
+}
+
+/** Normalize optional projectId input and fail when empty. */
+function normalizeProjectId(projectId: string, context: string) {
+  const normalized = projectId.trim();
+  if (normalized.length === 0) {
+    throw new Error(`Expected non-empty ${context}.`);
+  }
+
+  return normalized;
+}
+
+/** Resolve project scope from explicit input or URL query parameter. */
+function resolveProjectId(projectId?: string) {
+  if (typeof projectId === "string") {
+    return normalizeProjectId(projectId, "projectId");
+  }
+
+  assertBrowser();
+
+  const candidateProjectId = new URLSearchParams(window.location.search).get("projectId");
+  if (candidateProjectId) {
+    return normalizeProjectId(candidateProjectId, "projectId query parameter");
+  }
+
+  const candidateStoredProjectId = window.localStorage.getItem(UI_PROJECT_ID_STORAGE_KEY);
+  if (candidateStoredProjectId) {
+    return normalizeProjectId(candidateStoredProjectId, "localStorage projectId");
+  }
+
+  throw new Error("Missing required projectId. Provide projectId in URL query params or API arguments.");
 }
 
 /** Narrow worker responses to event messages. */
@@ -180,12 +219,14 @@ export function initializeDbBridge() {
  *
  * @returns Returns all persisted sprites.
  */
-export async function fetchSprites() {
+export async function fetchSprites(projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
   logger.debug("Fetch sprites from worker.");
   await initializeDbBridge();
   return sendRequest<SpriteRecord[]>({
     type: "GET_SPRITES",
     requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
   });
 }
 
@@ -194,12 +235,14 @@ export async function fetchSprites() {
  *
  * @returns Returns persisted camera state when present; otherwise `null`.
  */
-export async function loadCameraState() {
+export async function loadCameraState(projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
   logger.debug("Load camera state from worker.");
   await initializeDbBridge();
   return sendRequest<CameraState | null>({
     type: "GET_CAMERA_STATE",
     requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
   });
 }
 
@@ -209,7 +252,9 @@ export async function loadCameraState() {
  * @param nextSprite Sprite payload to persist.
  * @returns Returns the persisted sprite record.
  */
-export async function persistSprite(nextSprite: SpriteUpsertInput) {
+export async function persistSprite(nextSprite: SpriteUpsertInput, projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
+
   if (nextSprite.id) {
     assertUuidV4(nextSprite.id, "sprite id");
   }
@@ -222,6 +267,7 @@ export async function persistSprite(nextSprite: SpriteUpsertInput) {
   return sendRequest<SpriteRecord>({
     type: "upsert_sprite",
     requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
     payload: nextSprite,
   });
 }
@@ -232,7 +278,9 @@ export async function persistSprite(nextSprite: SpriteUpsertInput) {
  * @param worldStatePatch Sprite updates to persist.
  * @returns Returns persisted sprite records for the provided patch.
  */
-export async function persistWorldState(worldStatePatch: SpriteUpsertInput[]) {
+export async function persistWorldState(worldStatePatch: SpriteUpsertInput[], projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
+
   for (const nextSprite of worldStatePatch) {
     if (nextSprite.id) {
       assertUuidV4(nextSprite.id, "sprite id");
@@ -246,6 +294,7 @@ export async function persistWorldState(worldStatePatch: SpriteUpsertInput[]) {
   return sendRequest<SpriteRecord[]>({
     type: "upsert_sprites",
     requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
     payload: worldStatePatch,
   });
 }
@@ -256,7 +305,9 @@ export async function persistWorldState(worldStatePatch: SpriteUpsertInput[]) {
  * @param nextState Camera position/target snapshot.
  * @returns Returns a promise that resolves when persistence completes.
  */
-export async function persistCameraState(nextState: CameraState) {
+export async function persistCameraState(nextState: CameraState, projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
+
   logger.debug("Persist camera state snapshot.", {
     position: nextState.position,
     target: nextState.target,
@@ -265,7 +316,47 @@ export async function persistCameraState(nextState: CameraState) {
   return sendRequest<null>({
     type: "SAVE_CAMERA_STATE",
     requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
     payload: nextState,
+  });
+}
+
+/**
+ * Read raw DB contract text for a project.
+ *
+ * @param projectId Optional project scope override.
+ * @param scope Optional section filter.
+ * @returns Returns repository contract text exactly as returned by the worker.
+ */
+export async function getProjectContractText(projectId?: string, scope?: ContractScope) {
+  const resolvedProjectId = resolveProjectId(projectId);
+  logger.debug("Fetch project contract text from worker.", {
+    projectId: resolvedProjectId,
+    scope: scope ?? "all",
+  });
+  await initializeDbBridge();
+  return sendRequest<string>({
+    type: "GET_PROJECT_CONTRACT_TEXT",
+    requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
+    scope,
+  });
+}
+
+/**
+ * Delete all persisted records for a project scope.
+ *
+ * @param projectId Optional project scope override.
+ * @returns Returns a promise that resolves when delete completes.
+ */
+export async function deleteProjectData(projectId?: string) {
+  const resolvedProjectId = resolveProjectId(projectId);
+  logger.info("Delete project data in worker.", { projectId: resolvedProjectId });
+  await initializeDbBridge();
+  return sendRequest<null>({
+    type: "DELETE_PROJECT_DATA",
+    requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
   });
 }
 

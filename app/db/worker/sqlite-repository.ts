@@ -108,10 +108,8 @@ export class SqliteRepository {
 
     this.migrateLegacySpritesProjectScope();
     this.migrateLegacyVariablesProjectScope();
-    this.execute("CREATE INDEX IF NOT EXISTS idx_sprites_project_rowid ON sprites(project_id, rowid)");
-    this.execute(
-      "CREATE INDEX IF NOT EXISTS idx_variables_project_rowid ON variables(project_id, rowid)",
-    );
+    this.execute("CREATE INDEX IF NOT EXISTS idx_sprites_project_id ON sprites(project_id)");
+    this.execute("CREATE INDEX IF NOT EXISTS idx_variables_project_id ON variables(project_id)");
   }
 
   /** Read the number of persisted sprites for one project. */
@@ -244,14 +242,14 @@ export class SqliteRepository {
     const variableSection = this.formatVariableSection(normalizedProjectId);
 
     if (scope === "sprites") {
-      return spriteSection;
+      return `${spriteSection}\n`;
     }
 
     if (scope === "variables") {
-      return variableSection;
+      return `${variableSection}\n`;
     }
 
-    return `${spriteSection}\n\n${variableSection}`;
+    return `${spriteSection}\n\n${variableSection}\n`;
   }
 
   /** Format deterministic sprite contract section for one project. */

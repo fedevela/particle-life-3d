@@ -6,7 +6,9 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "test:e2e": "playwright test",
+    "test:e2e:hello-world": "playwright test tests/hello-world*.spec.ts --max-failures=1 --reporter=list"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -27,6 +29,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@react-router/dev": "7.12.0",
     "@tailwindcss/vite": "^4.1.13",
     "@types/node": "^22",
