@@ -1,87 +1,87 @@
-# Welcome to React Router!
+# Particle Life React App
 
-A modern, production-ready template for building full-stack React applications using React Router.
+A React Router + React Three Fiber application for rendering and exploring a persisted 3D particle scene. The app stores scene state in SQLite (WASM + OPFS) through a Web Worker-backed data layer.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Who this is for
 
-## Features
+This README is intended for incoming developers who need to:
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- run the app locally,
+- understand how the codebase is organized,
+- and know where to make feature changes safely.
 
-## Getting Started
+For a deeper system design guide, see `ARCHITECTURE.md`.
 
-### Installation
+## Tech stack
 
-Install the dependencies:
+- **Runtime:** Node.js + npm
+- **Framework:** React Router v7 (file-based route config)
+- **UI:** React 19, Tailwind CSS v4, Radix UI, Lucide icons
+- **3D:** Three.js via React Three Fiber and Drei
+- **State:** Zustand for UI state
+- **Persistence:** SQLite WASM in a browser worker, backed by OPFS
+- **Language:** TypeScript
+
+## Prerequisites
+
+- Node.js 20+ (recommended)
+- npm 10+ (recommended)
+- A modern Chromium-based browser for full OPFS support during local development
+
+## Quick start
 
 ```bash
 npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+Open `http://localhost:5173`.
 
-## Building for Production
+## Available scripts
 
-Create a production build:
+- `npm run dev` - Start the local development server.
+- `npm run build` - Build the production server/client bundles.
+- `npm run start` - Serve the built app from `build/server/index.js`.
+- `npm run typecheck` - Run route type generation and TypeScript checks.
 
-```bash
-npm run build
+## Project structure
+
+```text
+app/
+  db/
+    client-bridge/      # Main-thread bridge that talks to worker
+    worker/             # SQLite worker and repository
+    types.ts            # Shared persistence and domain types
+  features/3d/          # Canvas scene, camera controls, page shell
+  hooks/                # Data hooks (live query + sprites mapping)
+  routes/               # Route components used by React Router config
+  state/                # Zustand UI store
+  app.css               # Global styles and Tailwind theme tokens
+  root.tsx              # Root layout and error boundary
+  routes.ts             # Route tree definition
 ```
 
-## Deployment
+## Development workflow
 
-### Docker Deployment
+1. Start with `app/routes.ts` to understand route-level entry points.
+2. Follow route components into feature modules under `app/features/`.
+3. For persistent data changes, modify both:
+   - worker contract in `app/db/worker/messages.ts`, and
+   - bridge/repository implementations in `app/db/client-bridge/` and `app/db/worker/`.
+4. Run `npm run typecheck` before opening a PR.
 
-To build and run using Docker:
+## Persistence notes
 
-```bash
-docker build -t my-app .
+- SQLite runs in a dedicated Web Worker.
+- Scene data and camera state are persisted in OPFS (`particle-life.sqlite3`).
+- If OPFS or `SharedArrayBuffer` are unavailable, DB initialization will fail with an explicit error.
 
-# Run the container
-docker run -p 3000:3000 my-app
-```
+## Common troubleshooting
 
-The containerized application can be deployed to any platform that supports Docker, including:
+- **Blank or failing scene on startup:** open DevTools and check worker errors first.
+- **Camera not restoring:** ensure browser supports OPFS and no storage policy blocks worker persistence.
+- **Type errors after route edits:** run `npm run typecheck` to regenerate route types.
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+## Additional docs
 
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+- Architecture and dependency details: `ARCHITECTURE.md`

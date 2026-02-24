@@ -43,6 +43,11 @@ function SphereMesh({ sprite, texture }: { sprite: SpriteEntity; texture: THREE.
   );
 }
 
+/**
+ * Render scene lighting, helpers, sprites, and camera controls.
+ *
+ * @returns Returns scene nodes mounted inside the Three.js canvas.
+ */
 export function ParticleScene() {
   const sprites = useSprites();
   const sphereTexture = useMemo(() => createSphereTexture(), []);

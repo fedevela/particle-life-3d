@@ -10,8 +10,18 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
+/**
+ * Provide root-level link descriptors injected into the document head.
+ *
+ * @returns Returns route link descriptors for the root document.
+ */
 export const links: Route.LinksFunction = () => [];
 
+/**
+ * Render the shared HTML document layout used by all routes.
+ *
+ * @returns Returns the root HTML document structure.
+ */
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -30,10 +40,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Render the root application route outlet.
+ *
+ * @returns Returns the nested route outlet.
+ */
 export default function App() {
   return <Outlet />;
 }
 
+/**
+ * Render the route error boundary for loader and render failures.
+ *
+ * @returns Returns the fallback error UI.
+ */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!";
   let details = "An unexpected error occurred.";

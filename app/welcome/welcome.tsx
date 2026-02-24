@@ -1,6 +1,11 @@
 import logoDark from "./logo-dark.svg";
 import logoLight from "./logo-light.svg";
 
+/**
+ * Render the legacy starter welcome panel retained from the initial template.
+ *
+ * @returns Returns the starter welcome panel UI.
+ */
 export function Welcome() {
   return (
     <main className="flex items-center justify-center pt-16 pb-4">

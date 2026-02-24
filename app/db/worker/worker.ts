@@ -112,6 +112,7 @@ async function initializeDatabase() {
 
   const spriteCount = repository.readSpriteCount();
 
+  // Seed a default sphere so the first load always has visible content.
   if (spriteCount === 0) {
     repository.insertSprite({
       id: crypto.randomUUID(),
@@ -226,6 +227,7 @@ async function handleRequest(message: WorkerRequest) {
       return;
     }
     case "SUBSCRIBE_TABLE": {
+      // Subscriptions are table-scoped to keep cross-thread chatter minimal.
       subscribedTables.add(message.table);
       return;
     }

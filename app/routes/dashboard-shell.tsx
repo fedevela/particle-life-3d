@@ -5,6 +5,11 @@ import { NavLink, Outlet } from "react-router";
 import { cn } from "~/lib/cn";
 import { useUiStore } from "~/state/ui-store";
 
+/**
+ * Render the dashboard layout route with navigation and an outlet region.
+ *
+ * @returns Returns the dashboard shell layout.
+ */
 export default function DashboardShell() {
   const isExpanded = useUiStore((state) => state.isExpanded);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);

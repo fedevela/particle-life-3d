@@ -44,11 +44,17 @@ function toRequiredString(value: unknown, context: string) {
   return value;
 }
 
+/**
+ * Fetch and validate sprite entities for 3D scene rendering.
+ *
+ * @returns Returns a live list of validated sprite entities.
+ */
 export function useSprites() {
   const querySprites = useCallback(async () => {
     try {
       const rows = await fetchSprites();
 
+      // Convert persistence rows into strictly validated scene entities.
       return rows.map<SpriteEntity>((row) => {
         const id = toRequiredString(row.id, "sprite id");
         const type = toRequiredString(row.type, `sprite '${id}' type`);

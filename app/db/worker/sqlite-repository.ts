@@ -2,6 +2,7 @@ import type { SpriteRecord, VariableRecord } from "~/db/types";
 
 type SqliteObjectRow = Record<string, unknown>;
 
+/** Define the minimal sqlite-wasm DB interface consumed by the repository wrapper. */
 export type SqliteDatabase = {
   exec: (args: {
     sql: string;
@@ -11,6 +12,11 @@ export type SqliteDatabase = {
   }) => void;
 };
 
+/**
+ * Encapsulate typed SQLite reads/writes performed in the worker.
+ *
+ * This class centralizes schema management and row-to-domain mapping.
+ */
 export class SqliteRepository {
   private readonly db: SqliteDatabase;
 
@@ -18,6 +24,7 @@ export class SqliteRepository {
     this.db = db;
   }
 
+  /** Ensure required tables exist before any query is executed. */
   public ensureSchema() {
     this.execute(
       "CREATE TABLE IF NOT EXISTS variables (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, value TEXT NOT NULL)",
@@ -27,6 +34,11 @@ export class SqliteRepository {
     );
   }
 
+  /**
+   * Read the current number of persisted sprites.
+   *
+   * @returns Returns the current number of persisted sprites.
+   */
   public readSpriteCount() {
     const row = this.selectFirst("SELECT COUNT(*) AS count FROM sprites");
     if (row === null) {
@@ -42,6 +54,7 @@ export class SqliteRepository {
     return parsedCount;
   }
 
+  /** Insert a new sprite row. */
   public insertSprite(record: SpriteRecord) {
     this.execute(
       "INSERT INTO sprites (id, type, pos_x, pos_y, pos_z, metadata) VALUES (?, ?, ?, ?, ?, ?)",
@@ -49,6 +62,7 @@ export class SqliteRepository {
     );
   }
 
+  /** Update an existing sprite row by ID. */
   public updateSprite(record: SpriteRecord) {
     this.execute(
       "UPDATE sprites SET type = ?, pos_x = ?, pos_y = ?, pos_z = ?, metadata = ? WHERE id = ?",
@@ -56,6 +70,11 @@ export class SqliteRepository {
     );
   }
 
+  /**
+   * Find a sprite row by ID.
+   *
+   * @returns Returns the sprite ID when found; otherwise `null`.
+   */
   public findSpriteId(id: string): string | null {
     const row = this.selectFirst("SELECT id FROM sprites WHERE id = ? LIMIT 1", [id]);
     if (row === null) {
@@ -65,6 +84,11 @@ export class SqliteRepository {
     return this.toStringValue(row.id, "sprites.id");
   }
 
+  /**
+   * Fetch all sprite rows in insertion order.
+   *
+   * @returns Returns all sprite rows in insertion order.
+   */
   public fetchSprites(): SpriteRecord[] {
     const rows = this.selectAll(
       "SELECT id, type, pos_x, pos_y, pos_z, metadata FROM sprites ORDER BY rowid ASC",
@@ -73,6 +97,11 @@ export class SqliteRepository {
     return rows.map((row, index) => this.toSpriteRecord(row, index));
   }
 
+  /**
+   * Find a variable row by name.
+   *
+   * @returns Returns a variable row for the given name; otherwise `null`.
+   */
   public findVariableByName(name: string): VariableRecord | null {
     const row = this.selectFirst("SELECT id, name, value FROM variables WHERE name = ? LIMIT 1", [name]);
     if (row === null) {
@@ -86,6 +115,7 @@ export class SqliteRepository {
     };
   }
 
+  /** Insert a new variable row. */
   public insertVariable(record: VariableRecord) {
     this.execute("INSERT INTO variables (id, name, value) VALUES (?, ?, ?)", [
       record.id,
@@ -94,6 +124,7 @@ export class SqliteRepository {
     ]);
   }
 
+  /** Update a variable value by stable ID and name. */
   public updateVariableValue(record: VariableRecord) {
     this.execute("UPDATE variables SET value = ? WHERE id = ? AND name = ?", [
       record.value,

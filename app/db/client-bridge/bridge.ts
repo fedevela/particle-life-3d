@@ -55,6 +55,7 @@ function getWorker() {
       return;
     }
 
+    // Resolve/reject the Promise created for this specific requestId.
     const pending = pendingRequests.get(message.requestId);
     if (!pending) {
       throw new Error(`No pending request found for worker response '${message.requestId}'.`);
@@ -95,6 +96,11 @@ function sendRequest<TResponse>(request: WorkerRequest): Promise<TResponse> {
   });
 }
 
+/**
+ * Initialize the SQLite worker bridge once per browser session.
+ *
+ * @returns Returns a promise that resolves when the worker reports DB readiness.
+ */
 export function initializeDbBridge() {
   assertBrowser();
 
@@ -102,6 +108,7 @@ export function initializeDbBridge() {
     return initPromise;
   }
 
+  // Cache initialization so consumers can safely call this in parallel.
   initPromise = sendRequest<null>({
     type: "INIT",
     requestId: crypto.randomUUID(),
@@ -110,6 +117,11 @@ export function initializeDbBridge() {
   return initPromise;
 }
 
+/**
+ * Fetch all persisted sprites from the worker-backed repository.
+ *
+ * @returns Returns all persisted sprites.
+ */
 export async function fetchSprites() {
   await initializeDbBridge();
   return sendRequest<SpriteRecord[]>({
@@ -118,6 +130,11 @@ export async function fetchSprites() {
   });
 }
 
+/**
+ * Load persisted camera state for scene restoration.
+ *
+ * @returns Returns persisted camera state when present; otherwise `null`.
+ */
 export async function loadCameraState() {
   await initializeDbBridge();
   return sendRequest<CameraState | null>({
@@ -126,6 +143,12 @@ export async function loadCameraState() {
   });
 }
 
+/**
+ * Persist a sprite record by inserting or updating it.
+ *
+ * @param nextSprite Sprite payload to persist.
+ * @returns Returns the persisted sprite record.
+ */
 export async function persistSprite(nextSprite: SpriteUpsertInput) {
   await initializeDbBridge();
   return sendRequest<SpriteRecord>({
@@ -135,6 +158,12 @@ export async function persistSprite(nextSprite: SpriteUpsertInput) {
   });
 }
 
+/**
+ * Persist camera state used by scene controls restoration.
+ *
+ * @param nextState Camera position/target snapshot.
+ * @returns Returns a promise that resolves when persistence completes.
+ */
 export async function persistCameraState(nextState: CameraState) {
   await initializeDbBridge();
   return sendRequest<null>({
@@ -144,6 +173,13 @@ export async function persistCameraState(nextState: CameraState) {
   });
 }
 
+/**
+ * Subscribe to worker-side updates for a table.
+ *
+ * @param table Table name to observe.
+ * @param listener Callback invoked on worker update events.
+ * @returns Returns an unsubscribe function.
+ */
 export function subscribeToTable(table: DbTable, listener: () => void) {
   const worker = getWorker();
   const existing = tableListeners.get(table);
@@ -153,6 +189,7 @@ export function subscribeToTable(table: DbTable, listener: () => void) {
   listeners.add(listener);
   tableListeners.set(table, listeners);
 
+  // Tell the worker to emit update events only while this table has listeners.
   if (shouldSubscribe) {
     worker.postMessage({ type: "SUBSCRIBE_TABLE", table } satisfies WorkerRequest);
   }

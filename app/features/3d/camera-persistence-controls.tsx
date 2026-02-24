@@ -5,6 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCameraState, persistCameraState } from "~/db/client-bridge/bridge";
 import type { CameraState } from "~/db/types";
 
+/**
+ * Render orbit controls that restore and persist camera state in SQLite.
+ *
+ * @returns Returns configured orbit controls for the active scene camera.
+ */
 export function CameraPersistenceControls() {
   const controlsRef = useRef<any>(null);
   const { camera } = useThree();
@@ -61,6 +66,7 @@ export function CameraPersistenceControls() {
       window.clearTimeout(saveTimerRef.current);
     }
 
+    // Debounce persistence to avoid writing on every tiny interaction.
     saveTimerRef.current = window.setTimeout(() => {
       void saveCamera().catch((saveError: unknown) => {
         setError(saveError instanceof Error ? saveError : new Error("Failed to persist camera state."));

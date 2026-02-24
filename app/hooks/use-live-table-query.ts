@@ -3,6 +3,14 @@ import { useEffect, useState } from "react";
 import { initializeDbBridge, subscribeToTable } from "~/db/client-bridge/bridge";
 import type { DbTable } from "~/db/worker/messages";
 
+/**
+ * Subscribe to worker table updates and keep query data fresh.
+ *
+ * @param table Worker table channel to subscribe to.
+ * @param query Async loader invoked during initialization and updates.
+ * @param initialValue Initial state returned before first successful refresh.
+ * @returns Returns the latest successful query result.
+ */
 export function useLiveTableQuery<T>(
   table: DbTable,
   query: () => Promise<T>,
@@ -18,6 +26,7 @@ export function useLiveTableQuery<T>(
   useEffect(() => {
     let isDisposed = false;
 
+    // Re-run the consumer query and keep the latest successful value.
     const refresh = async () => {
       try {
         const next = await query();
@@ -36,6 +45,7 @@ export function useLiveTableQuery<T>(
       }
     };
 
+    // Ensure worker + DB are ready before the first query execution.
     void initializeDbBridge()
       .then(() => {
         if (!isDisposed) {
@@ -52,6 +62,7 @@ export function useLiveTableQuery<T>(
         }
       });
 
+    // Keep this hook live by subscribing to worker table update events.
     const unsubscribe = subscribeToTable(table, () => {
       void refresh();
     });

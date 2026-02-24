@@ -1,5 +1,6 @@
 import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
 
+/** Define the application route tree used by React Router. */
 export default [
   layout("routes/dashboard-shell.tsx", [
     index("routes/dashboard-home.tsx"),
