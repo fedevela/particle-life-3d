@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+/** Define dashboard shell UI state shape managed in Zustand. */
 type UiState = {
   isExpanded: boolean;
   toggleSidebar: () => void;

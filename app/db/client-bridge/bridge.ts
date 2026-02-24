@@ -1,44 +1,66 @@
 import type { CameraState, SpriteRecord, SpriteUpsertInput } from "~/db/types";
 import type { DbTable, WorkerEvent, WorkerRequest, WorkerResponse } from "~/db/worker/messages";
+import { createLogger } from "~/lib/logger";
+import { assertUuidV4 } from "~/lib/uuid";
 
+/** Track a request Promise pair waiting for worker completion. */
 type PendingRequest = {
   resolve: (value: any) => void;
   reject: (reason?: unknown) => void;
+  requestType: WorkerRequest["type"];
 };
 
+/** Provide scoped logs for DB bridge activity. */
+const logger = createLogger("db-bridge");
+
+/** Hold the singleton database worker instance for this browser tab. */
 let workerInstance: Worker | null = null;
+/** Cache bridge initialization so callers can share one startup request. */
 let initPromise: Promise<void> | null = null;
 
+/** Map request IDs to pending promise handlers. */
 const pendingRequests = new Map<string, PendingRequest>();
+/** Track per-table listeners for worker table update events. */
 const tableListeners = new Map<DbTable, Set<() => void>>();
 
+/** Convert unknown failures into Error objects with a fallback message. */
 function toError(error: unknown, fallbackMessage: string) {
   return error instanceof Error ? error : new Error(fallbackMessage);
 }
 
+/** Reject and clear all in-flight requests when the worker becomes unhealthy. */
 function rejectAllPendingRequests(error: Error) {
+  logger.error("Reject all pending worker requests.", {
+    pendingCount: pendingRequests.size,
+    error: error.message,
+  });
   pendingRequests.forEach((pending) => {
     pending.reject(error);
   });
   pendingRequests.clear();
 }
 
+/** Ensure this module is only used in the browser runtime. */
 function assertBrowser() {
   if (typeof window === "undefined") {
     throw new Error("Database bridge is only available in the browser.");
   }
 }
 
+/** Narrow worker responses to event messages. */
 function isWorkerEvent(message: WorkerResponse): message is WorkerEvent {
   return message.type === "TABLE_UPDATED";
 }
 
+/** Create or return the singleton worker instance and wire message handlers. */
 function getWorker() {
   assertBrowser();
 
   if (workerInstance) {
     return workerInstance;
   }
+
+  logger.info("Create database worker instance.");
 
   const worker = new Worker(new URL("../worker/worker.ts", import.meta.url), {
     type: "module",
@@ -49,6 +71,10 @@ function getWorker() {
 
     if (isWorkerEvent(message)) {
       const listeners = tableListeners.get(message.table);
+      logger.debug("Receive table update event.", {
+        table: message.table,
+        listenerCount: listeners?.size ?? 0,
+      });
       listeners?.forEach((listener) => {
         listener();
       });
@@ -58,25 +84,40 @@ function getWorker() {
     // Resolve/reject the Promise created for this specific requestId.
     const pending = pendingRequests.get(message.requestId);
     if (!pending) {
+      logger.error("Receive worker response with no pending request.", {
+        requestId: message.requestId,
+      });
       throw new Error(`No pending request found for worker response '${message.requestId}'.`);
     }
 
     pendingRequests.delete(message.requestId);
 
     if (message.ok) {
+      logger.debug("Resolve worker request.", {
+        requestId: message.requestId,
+        requestType: pending.requestType,
+      });
       pending.resolve(message.data);
       return;
     }
+
+    logger.warn("Reject worker request with worker error.", {
+      requestId: message.requestId,
+      requestType: pending.requestType,
+      error: message.error,
+    });
 
     pending.reject(new Error(message.error));
   };
 
   worker.onerror = (event: ErrorEvent) => {
     const error = toError(event.error, event.message || "Database worker execution failed.");
+    logger.error("Receive worker runtime error.", { error: error.message });
     rejectAllPendingRequests(error);
   };
 
   worker.onmessageerror = () => {
+    logger.error("Receive unreadable message from worker.");
     rejectAllPendingRequests(new Error("Database worker sent an unreadable message."));
   };
 
@@ -84,12 +125,26 @@ function getWorker() {
   return worker;
 }
 
+/** Send a typed request to the worker and await its response. */
 function sendRequest<TResponse>(request: WorkerRequest): Promise<TResponse> {
   const worker = getWorker();
 
   return new Promise<TResponse>((resolve, reject) => {
     if ("requestId" in request) {
-      pendingRequests.set(request.requestId, { resolve, reject });
+      pendingRequests.set(request.requestId, {
+        resolve,
+        reject,
+        requestType: request.type,
+      });
+
+      logger.debug("Send worker request.", {
+        requestId: request.requestId,
+        requestType: request.type,
+      });
+    } else {
+      logger.debug("Send worker request without requestId.", {
+        requestType: request.type,
+      });
     }
 
     worker.postMessage(request);
@@ -105,8 +160,11 @@ export function initializeDbBridge() {
   assertBrowser();
 
   if (initPromise) {
+    logger.debug("Reuse cached database bridge initialization promise.");
     return initPromise;
   }
+
+  logger.info("Initialize database bridge.");
 
   // Cache initialization so consumers can safely call this in parallel.
   initPromise = sendRequest<null>({
@@ -123,6 +181,7 @@ export function initializeDbBridge() {
  * @returns Returns all persisted sprites.
  */
 export async function fetchSprites() {
+  logger.debug("Fetch sprites from worker.");
   await initializeDbBridge();
   return sendRequest<SpriteRecord[]>({
     type: "GET_SPRITES",
@@ -136,6 +195,7 @@ export async function fetchSprites() {
  * @returns Returns persisted camera state when present; otherwise `null`.
  */
 export async function loadCameraState() {
+  logger.debug("Load camera state from worker.");
   await initializeDbBridge();
   return sendRequest<CameraState | null>({
     type: "GET_CAMERA_STATE",
@@ -150,11 +210,43 @@ export async function loadCameraState() {
  * @returns Returns the persisted sprite record.
  */
 export async function persistSprite(nextSprite: SpriteUpsertInput) {
+  if (nextSprite.id) {
+    assertUuidV4(nextSprite.id, "sprite id");
+  }
+
+  logger.info("Persist single sprite update.", {
+    spriteId: nextSprite.id ?? null,
+    spriteType: nextSprite.type,
+  });
   await initializeDbBridge();
   return sendRequest<SpriteRecord>({
-    type: "UPSERT_SPRITE",
+    type: "upsert_sprite",
     requestId: crypto.randomUUID(),
     payload: nextSprite,
+  });
+}
+
+/**
+ * Persist a world-state patch by upserting only provided sprite rows.
+ *
+ * @param worldStatePatch Sprite updates to persist.
+ * @returns Returns persisted sprite records for the provided patch.
+ */
+export async function persistWorldState(worldStatePatch: SpriteUpsertInput[]) {
+  for (const nextSprite of worldStatePatch) {
+    if (nextSprite.id) {
+      assertUuidV4(nextSprite.id, "sprite id");
+    }
+  }
+
+  logger.info("Persist world-state patch.", {
+    patchSize: worldStatePatch.length,
+  });
+  await initializeDbBridge();
+  return sendRequest<SpriteRecord[]>({
+    type: "upsert_sprites",
+    requestId: crypto.randomUUID(),
+    payload: worldStatePatch,
   });
 }
 
@@ -165,6 +257,10 @@ export async function persistSprite(nextSprite: SpriteUpsertInput) {
  * @returns Returns a promise that resolves when persistence completes.
  */
 export async function persistCameraState(nextState: CameraState) {
+  logger.debug("Persist camera state snapshot.", {
+    position: nextState.position,
+    target: nextState.target,
+  });
   await initializeDbBridge();
   return sendRequest<null>({
     type: "SAVE_CAMERA_STATE",
@@ -189,8 +285,14 @@ export function subscribeToTable(table: DbTable, listener: () => void) {
   listeners.add(listener);
   tableListeners.set(table, listeners);
 
+  logger.debug("Register table listener.", {
+    table,
+    listenerCount: listeners.size,
+  });
+
   // Tell the worker to emit update events only while this table has listeners.
   if (shouldSubscribe) {
+    logger.info("Subscribe worker to table updates.", { table });
     worker.postMessage({ type: "SUBSCRIBE_TABLE", table } satisfies WorkerRequest);
   }
 
@@ -202,8 +304,14 @@ export function subscribeToTable(table: DbTable, listener: () => void) {
 
     currentListeners.delete(listener);
 
+    logger.debug("Unregister table listener.", {
+      table,
+      listenerCount: currentListeners.size,
+    });
+
     if (currentListeners.size === 0) {
       tableListeners.delete(table);
+      logger.info("Unsubscribe worker from table updates.", { table });
       worker.postMessage({ type: "UNSUBSCRIBE_TABLE", table } satisfies WorkerRequest);
     }
   };

@@ -2,16 +2,26 @@ import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import sqliteWasmUrl from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url";
 
 import type { CameraState, SpriteRecord, VariableRecord } from "~/db/types";
+import { createLogger } from "~/lib/logger";
+import { assertUuidV4 } from "~/lib/uuid";
 
 import type { DbTable, WorkerRequest, WorkerResponse } from "./messages";
 import { SqliteRepository, type SqliteDatabase } from "./sqlite-repository";
 
+/** Define the OPFS SQLite database filename. */
 const DATABASE_FILE_NAME = "particle-life.sqlite3";
+/** Define the variable key used to store camera state. */
 const CAMERA_STATE_NAME = "camera_state";
+/** Define the sqlite-wasm OPFS VFS name. */
 const OPFS_VFS_NAME = "opfs";
+/** Define the default seeded sprite color. */
 const SEEDED_SPRITE_COLOR = "#93c5fd";
+/** Define a repository label used in worker error messages. */
 const SQLITE_REPOSITORY_NAME = "sqlite repository";
+/** Provide scoped logs for worker-side persistence activity. */
+const logger = createLogger("db-worker");
 
+/** Serialize arbitrary values to JSON and raise a contextual error on failure. */
 function stringifyJson(value: unknown, context: string) {
   try {
     return JSON.stringify(value);
@@ -20,6 +30,7 @@ function stringifyJson(value: unknown, context: string) {
   }
 }
 
+/** Validate that a value is a finite [x, y, z] tuple. */
 function isNumberTriple(value: unknown): value is [number, number, number] {
   return (
     Array.isArray(value) &&
@@ -28,6 +39,7 @@ function isNumberTriple(value: unknown): value is [number, number, number] {
   );
 }
 
+/** Parse and validate persisted camera state JSON payload. */
 function parseCameraState(raw: string): CameraState {
   let parsed: unknown;
 
@@ -57,6 +69,7 @@ function parseCameraState(raw: string): CameraState {
   };
 }
 
+/** Describe the sqlite-wasm API shape consumed by this worker module. */
 type SqliteApi = {
   capi: {
     sqlite3_vfs_find: (name: string) => number;
@@ -66,28 +79,48 @@ type SqliteApi = {
   };
 };
 
+/** Hold the initialized worker database connection. */
 let sqliteDb: SqliteDatabase | null = null;
+/** Hold the typed repository wrapper around the SQLite connection. */
 let sqliteRepository: SqliteRepository | null = null;
+/** Track which tables currently have active subscriptions. */
 const subscribedTables = new Set<DbTable>();
 
+/** Post a worker response/event message to the main thread. */
 function postMessageToMain(message: WorkerResponse) {
   self.postMessage(message);
 }
 
+/** Emit a table update event when that table is currently subscribed. */
 function emitTableUpdated(table: DbTable) {
   if (subscribedTables.has(table)) {
+    logger.debug("Emit table update event.", { table });
     postMessageToMain({ type: "TABLE_UPDATED", table });
   }
 }
 
+/** Throw a namespaced repository error with consistent formatting. */
 function repositoryError(detail: string): never {
   throw new Error(`[${SQLITE_REPOSITORY_NAME}] ${detail}`);
 }
 
+/** Resolve a sprite ID from payload or generate a new UUIDv4 when omitted. */
+function resolveSpriteId(candidateId: string | undefined, context: string) {
+  if (candidateId) {
+    return assertUuidV4(candidateId, context);
+  }
+
+  return assertUuidV4(crypto.randomUUID(), `${context} generated id`);
+}
+
+/** Initialize sqlite-wasm + OPFS and ensure schema/seed data exist. */
 async function initializeDatabase() {
   if (sqliteRepository && sqliteDb) {
+    logger.debug("Reuse existing SQLite database instance.");
     return;
   }
+
+  logger.info("Initialize SQLite database.");
 
   const sqlite3 = (await sqlite3InitModule({
     locateFile: (path, prefix) => (path === "sqlite3.wasm" ? sqliteWasmUrl : `${prefix}${path}`),
@@ -109,13 +142,16 @@ async function initializeDatabase() {
 
   const repository = new SqliteRepository(db);
   repository.ensureSchema();
+  logger.debug("Ensure SQLite schema.");
 
   const spriteCount = repository.readSpriteCount();
+  logger.info("Read existing sprite count.", { spriteCount });
 
   // Seed a default sphere so the first load always has visible content.
   if (spriteCount === 0) {
+    logger.info("Seed initial sprite because database is empty.");
     repository.insertSprite({
-      id: crypto.randomUUID(),
+      id: assertUuidV4(crypto.randomUUID(), "seeded sprite id"),
       type: "sphere",
       pos_x: 0,
       pos_y: 0,
@@ -126,6 +162,7 @@ async function initializeDatabase() {
 
   sqliteDb = db;
   sqliteRepository = repository;
+  logger.info("SQLite database initialization complete.");
 }
 
 async function getWorkerRepository() {
@@ -138,16 +175,27 @@ async function getWorkerRepository() {
   return sqliteRepository;
 }
 
+/** Handle one typed request from the main thread. */
 async function handleRequest(message: WorkerRequest) {
+  logger.debug("Handle worker request.", {
+    requestType: message.type,
+    requestId: "requestId" in message ? message.requestId : null,
+  });
+
   switch (message.type) {
     case "INIT": {
       await initializeDatabase();
+      logger.info("Complete INIT request.", { requestId: message.requestId });
       postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
       return;
     }
     case "GET_SPRITES": {
       const repository = await getWorkerRepository();
       const sprites = repository.fetchSprites();
+      logger.debug("Return sprites from repository.", {
+        requestId: message.requestId,
+        spriteCount: sprites.length,
+      });
 
       postMessageToMain({
         type: "RESPONSE",
@@ -157,10 +205,10 @@ async function handleRequest(message: WorkerRequest) {
       });
       return;
     }
-    case "UPSERT_SPRITE": {
+    case "upsert_sprite": {
       const repository = await getWorkerRepository();
 
-      const recordId = message.payload.id ?? crypto.randomUUID();
+      const recordId = resolveSpriteId(message.payload.id, "upsert_sprite payload id");
       const metadata = stringifyJson(message.payload.metadata ?? {}, "sprite metadata");
 
       const nextRecord: SpriteRecord = {
@@ -173,12 +221,19 @@ async function handleRequest(message: WorkerRequest) {
       };
 
       const existingId = repository.findSpriteId(recordId);
+      const operation = existingId !== null ? "update" : "insert";
 
       if (existingId !== null) {
         repository.updateSprite(nextRecord);
       } else {
         repository.insertSprite(nextRecord);
       }
+
+      logger.info("Persist single sprite.", {
+        requestId: message.requestId,
+        spriteId: recordId,
+        operation,
+      });
 
       emitTableUpdated("sprites");
 
@@ -190,11 +245,67 @@ async function handleRequest(message: WorkerRequest) {
       });
       return;
     }
+    case "upsert_sprites": {
+      const repository = await getWorkerRepository();
+      const persistedRecords: SpriteRecord[] = [];
+      let insertCount = 0;
+      let updateCount = 0;
+
+      for (const nextSprite of message.payload) {
+        const recordId = resolveSpriteId(nextSprite.id, "upsert_sprites payload id");
+        const metadata = stringifyJson(nextSprite.metadata ?? {}, "sprite metadata");
+
+        const nextRecord: SpriteRecord = {
+          id: recordId,
+          type: nextSprite.type,
+          pos_x: nextSprite.position[0],
+          pos_y: nextSprite.position[1],
+          pos_z: nextSprite.position[2],
+          metadata,
+        };
+
+        const existingId = repository.findSpriteId(recordId);
+
+        if (existingId !== null) {
+          repository.updateSprite(nextRecord);
+          updateCount += 1;
+        } else {
+          repository.insertSprite(nextRecord);
+          insertCount += 1;
+        }
+
+        persistedRecords.push(nextRecord);
+      }
+
+      if (persistedRecords.length > 0) {
+        emitTableUpdated("sprites");
+      }
+
+      logger.info("Persist sprite batch.", {
+        requestId: message.requestId,
+        patchSize: message.payload.length,
+        persistedCount: persistedRecords.length,
+        insertCount,
+        updateCount,
+      });
+
+      postMessageToMain({
+        type: "RESPONSE",
+        requestId: message.requestId,
+        ok: true,
+        data: persistedRecords,
+      });
+      return;
+    }
     case "GET_CAMERA_STATE": {
       const repository = await getWorkerRepository();
       const cameraVariable = repository.findVariableByName(CAMERA_STATE_NAME);
 
       const parsed = cameraVariable ? parseCameraState(cameraVariable.value) : null;
+      logger.debug("Return camera state.", {
+        requestId: message.requestId,
+        hasCameraState: parsed !== null,
+      });
 
       postMessageToMain({
         type: "RESPONSE",
@@ -221,6 +332,11 @@ async function handleRequest(message: WorkerRequest) {
         repository.insertVariable(record);
       }
 
+      logger.info("Persist camera state.", {
+        requestId: message.requestId,
+        operation: existing ? "update" : "insert",
+      });
+
       emitTableUpdated("variables");
 
       postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
@@ -229,10 +345,18 @@ async function handleRequest(message: WorkerRequest) {
     case "SUBSCRIBE_TABLE": {
       // Subscriptions are table-scoped to keep cross-thread chatter minimal.
       subscribedTables.add(message.table);
+      logger.debug("Subscribe table events.", {
+        table: message.table,
+        subscribedCount: subscribedTables.size,
+      });
       return;
     }
     case "UNSUBSCRIBE_TABLE": {
       subscribedTables.delete(message.table);
+      logger.debug("Unsubscribe table events.", {
+        table: message.table,
+        subscribedCount: subscribedTables.size,
+      });
       return;
     }
     default: {
@@ -246,6 +370,12 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const message = event.data;
 
   void handleRequest(message).catch((error: unknown) => {
+    logger.error("Worker request failed.", {
+      requestType: message.type,
+      requestId: "requestId" in message ? message.requestId : null,
+      error: error instanceof Error ? error.message : "Unknown worker error",
+    });
+
     if ("requestId" in message) {
       postMessageToMain({
         type: "RESPONSE",

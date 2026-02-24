@@ -7,7 +7,8 @@ export type DbTable = "variables" | "sprites";
 export type WorkerRequest =
   | { type: "INIT"; requestId: string }
   | { type: "GET_SPRITES"; requestId: string }
-  | { type: "UPSERT_SPRITE"; requestId: string; payload: SpriteUpsertInput }
+  | { type: "upsert_sprite"; requestId: string; payload: SpriteUpsertInput }
+  | { type: "upsert_sprites"; requestId: string; payload: SpriteUpsertInput[] }
   | { type: "GET_CAMERA_STATE"; requestId: string }
   | { type: "SAVE_CAMERA_STATE"; requestId: string; payload: CameraState }
   | { type: "SUBSCRIBE_TABLE"; table: DbTable }

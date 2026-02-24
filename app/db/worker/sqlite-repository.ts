@@ -1,5 +1,6 @@
 import type { SpriteRecord, VariableRecord } from "~/db/types";
 
+/** Represent one sqlite row mapped as an object with unknown scalar values. */
 type SqliteObjectRow = Record<string, unknown>;
 
 /** Define the minimal sqlite-wasm DB interface consumed by the repository wrapper. */
@@ -18,8 +19,10 @@ export type SqliteDatabase = {
  * This class centralizes schema management and row-to-domain mapping.
  */
 export class SqliteRepository {
+  /** Store the concrete sqlite-wasm database adapter. */
   private readonly db: SqliteDatabase;
 
+  /** Initialize repository with a sqlite database adapter. */
   constructor(db: SqliteDatabase) {
     this.db = db;
   }
@@ -133,6 +136,7 @@ export class SqliteRepository {
     ]);
   }
 
+  /** Execute a SQL statement with optional bound parameters. */
   private execute(sql: string, bind: unknown[] = []) {
     this.db.exec({
       sql,
@@ -140,6 +144,7 @@ export class SqliteRepository {
     });
   }
 
+  /** Execute a SQL query and return all rows as object records. */
   private selectAll(sql: string, bind: unknown[] = []) {
     const rows: SqliteObjectRow[] = [];
 
@@ -159,11 +164,13 @@ export class SqliteRepository {
     return rows;
   }
 
+  /** Execute a SQL query and return only the first row when present. */
   private selectFirst(sql: string, bind: unknown[] = []) {
     const rows = this.selectAll(sql, bind);
     return rows[0] ?? null;
   }
 
+  /** Map one sqlite row into a validated `SpriteRecord`. */
   private toSpriteRecord(row: SqliteObjectRow, index: number): SpriteRecord {
     const spriteId = this.toStringValue(row.id, `sprites[${index}].id`);
 
@@ -177,6 +184,7 @@ export class SqliteRepository {
     };
   }
 
+  /** Validate and return a required non-empty string scalar. */
   private toStringValue(value: unknown, field: string) {
     if (typeof value !== "string" || value.length === 0) {
       throw new Error(`Expected non-empty string for '${field}', received ${String(value)}.`);
@@ -185,6 +193,7 @@ export class SqliteRepository {
     return value;
   }
 
+  /** Validate and return a finite numeric scalar. */
   private toFiniteNumber(value: unknown, field: string) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {

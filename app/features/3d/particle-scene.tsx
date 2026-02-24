@@ -5,6 +5,7 @@ import { CameraPersistenceControls } from "~/features/3d/camera-persistence-cont
 import type { SpriteEntity } from "~/db/types";
 import { useSprites } from "~/hooks/use-sprites";
 
+/** Create a reusable procedural sphere texture used by sprite materials. */
 function createSphereTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
@@ -32,6 +33,7 @@ function createSphereTexture() {
   return texture;
 }
 
+/** Render one sphere sprite mesh from a validated sprite entity. */
 function SphereMesh({ sprite, texture }: { sprite: SpriteEntity; texture: THREE.Texture }) {
   const color = typeof sprite.metadata.color === "string" ? sprite.metadata.color : "#93c5fd";
 
