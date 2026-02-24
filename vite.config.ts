@@ -2,6 +2,7 @@ import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
+import glsl from "vite-plugin-glsl";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 const chromeDevtoolsProbePath =
@@ -59,6 +60,9 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
+    glsl({
+      include: ["**/*.glsl", "**/*.vert", "**/*.frag"],
+    }),
     reactRouter(),
     tsconfigPaths(),
     enforceCrossOriginIsolation,

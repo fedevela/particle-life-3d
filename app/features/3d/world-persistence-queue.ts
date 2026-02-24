@@ -1,7 +1,6 @@
 import { persistWorldState } from "~/db/client-bridge/bridge";
 import type { SpriteUpsertInput } from "~/db/types";
 import { createLogger } from "~/lib/logger";
-import { assertUuidV4 } from "~/lib/uuid";
 
 /** Define the debounce delay applied before flushing queued sprite updates. */
 const SPRITE_PERSIST_DELAY_MS = 5000;
@@ -30,7 +29,7 @@ type SpriteUpsertWithId = SpriteUpsertInput & { id: string };
 /** Ensure queued sprite state has a UUIDv4 id, generating one when missing. */
 function ensureSpriteStateId(nextState: SpriteUpsertInput) {
   if (!nextState.id) {
-    const initializedId = assertUuidV4(crypto.randomUUID(), "generated sprite id");
+    const initializedId = crypto.randomUUID();
 
     logger.info("Initialize sprite id for queued state.", {
       spriteId: initializedId,
@@ -45,7 +44,7 @@ function ensureSpriteStateId(nextState: SpriteUpsertInput) {
 
   return {
     ...nextState,
-    id: assertUuidV4(nextState.id, "queued sprite id"),
+    id: nextState.id,
   } satisfies SpriteUpsertWithId;
 }
 
@@ -170,7 +169,7 @@ export async function flushQueuedWorldState() {
         for (let restoreIndex = index; restoreIndex < batches.length; restoreIndex += 1) {
           for (const nextState of batches[restoreIndex]) {
             const normalizedState = ensureSpriteStateId(nextState);
-            const spriteId = assertUuidV4(normalizedState.id, "re-queued sprite id");
+            const spriteId = normalizedState.id;
             queuedSpriteUpdates.set(spriteId, normalizedState);
           }
         }

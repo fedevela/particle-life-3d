@@ -1,9 +1,8 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import sqliteWasmUrl from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url";
 
-import type { CameraState, SpriteRecord, VariableRecord } from "~/db/types";
-import { createLogger } from "~/lib/logger";
-import { assertUuidV4 } from "~/lib/uuid";
+import type { CameraState, SpriteRecord, VariableRecord } from "../types";
+import { createLogger } from "../../lib/logger";
 
 import type { DbTable, WorkerRequest, WorkerResponse } from "./messages";
 import { SqliteRepository, type SqliteDatabase } from "./sqlite-repository";
@@ -105,12 +104,12 @@ function repositoryError(detail: string): never {
 }
 
 /** Resolve a sprite ID from payload or generate a new UUIDv4 when omitted. */
-function resolveSpriteId(candidateId: string | undefined, context: string) {
+function resolveSpriteId(candidateId: string | undefined) {
   if (candidateId) {
-    return assertUuidV4(candidateId, context);
+    return candidateId;
   }
 
-  return assertUuidV4(crypto.randomUUID(), `${context} generated id`);
+  return crypto.randomUUID();
 }
 
 /** Seed one default sprite for projects with no persisted sprites yet. */
@@ -124,7 +123,7 @@ function ensureProjectSeeded(repository: SqliteRepository, projectId: string) {
   logger.info("Seed initial sprite for project.", { projectId });
   repository.insertSprite(
     {
-      id: assertUuidV4(crypto.randomUUID(), "seeded sprite id"),
+      id: crypto.randomUUID(),
       type: "sphere",
       pos_x: 0,
       pos_y: 0,
@@ -216,7 +215,7 @@ async function handleRequest(message: WorkerRequest) {
     case "upsert_sprite": {
       const repository = await getWorkerRepository();
 
-      const recordId = resolveSpriteId(message.payload.id, "upsert_sprite payload id");
+      const recordId = resolveSpriteId(message.payload.id);
       const metadata = stringifyJson(message.payload.metadata ?? {}, "sprite metadata");
 
       const nextRecord: SpriteRecord = {
@@ -261,7 +260,7 @@ async function handleRequest(message: WorkerRequest) {
       let updateCount = 0;
 
       for (const nextSprite of message.payload) {
-        const recordId = resolveSpriteId(nextSprite.id, "upsert_sprites payload id");
+        const recordId = resolveSpriteId(nextSprite.id);
         const metadata = stringifyJson(nextSprite.metadata ?? {}, "sprite metadata");
 
         const nextRecord: SpriteRecord = {

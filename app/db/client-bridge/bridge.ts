@@ -7,7 +7,6 @@ import type {
   WorkerResponse,
 } from "~/db/worker/messages";
 import { createLogger } from "~/lib/logger";
-import { assertUuidV4 } from "~/lib/uuid";
 
 /** Track a request Promise pair waiting for worker completion. */
 type PendingRequest = {
@@ -255,10 +254,6 @@ export async function loadCameraState(projectId?: string) {
 export async function persistSprite(nextSprite: SpriteUpsertInput, projectId?: string) {
   const resolvedProjectId = resolveProjectId(projectId);
 
-  if (nextSprite.id) {
-    assertUuidV4(nextSprite.id, "sprite id");
-  }
-
   logger.info("Persist single sprite update.", {
     spriteId: nextSprite.id ?? null,
     spriteType: nextSprite.type,
@@ -280,12 +275,6 @@ export async function persistSprite(nextSprite: SpriteUpsertInput, projectId?: s
  */
 export async function persistWorldState(worldStatePatch: SpriteUpsertInput[], projectId?: string) {
   const resolvedProjectId = resolveProjectId(projectId);
-
-  for (const nextSprite of worldStatePatch) {
-    if (nextSprite.id) {
-      assertUuidV4(nextSprite.id, "sprite id");
-    }
-  }
 
   logger.info("Persist world-state patch.", {
     patchSize: worldStatePatch.length,

@@ -1,5 +1,5 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { ChevronFirst, ChevronLast, Sparkles } from "lucide-react";
+import { CircleDot, ChevronFirst, ChevronLast, Sparkles } from "lucide-react";
 import { NavLink, Outlet } from "react-router";
 
 import { cn } from "~/lib/cn";
@@ -55,6 +55,20 @@ export default function DashboardShell() {
             >
               <Sparkles size={16} className="shrink-0" />
               <span className={cn(!isExpanded && "sr-only")}>Hello World</span>
+            </NavLink>
+            <NavLink
+              to="/hello-shader-world"
+              className={({ isActive }) =>
+                cn(
+                  "mt-2 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  isActive
+                    ? "bg-cyan-400/20 text-cyan-100"
+                    : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+                )
+              }
+            >
+              <CircleDot size={16} className="shrink-0" />
+              <span className={cn(!isExpanded && "sr-only")}>Hello Shader World</span>
             </NavLink>
           </nav>
         </aside>

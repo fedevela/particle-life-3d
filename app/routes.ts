@@ -5,5 +5,6 @@ export default [
   layout("routes/dashboard-shell.tsx", [
     index("routes/dashboard-home.tsx"),
     route("hello-world", "routes/hello-world.tsx"),
+    route("hello-shader-world", "routes/hello-shader-world.tsx"),
   ]),
 ] satisfies RouteConfig;
