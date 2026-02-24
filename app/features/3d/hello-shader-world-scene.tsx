@@ -28,21 +28,14 @@ type HelloShaderWorldSceneProps = {
 
 /** Create the static position attribute expected by Three Points geometry. */
 function createPositionAttribute() {
-  return new THREE.BufferAttribute(new Float32Array(SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE * 3), 3);
+  return new THREE.BufferAttribute(new Float32Array(3), 3);
 }
 
 /** Create a UV reference per particle texel for shader texture lookup. */
 function createReferenceAttribute() {
-  const references = new Float32Array(SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE * 2);
-
-  for (let yIndex = 0; yIndex < SHADER_TEXTURE_SIZE; yIndex += 1) {
-    for (let xIndex = 0; xIndex < SHADER_TEXTURE_SIZE; xIndex += 1) {
-      const index = yIndex * SHADER_TEXTURE_SIZE + xIndex;
-      const offset = index * 2;
-      references[offset] = (xIndex + 0.5) / SHADER_TEXTURE_SIZE;
-      references[offset + 1] = (yIndex + 0.5) / SHADER_TEXTURE_SIZE;
-    }
-  }
+  const references = new Float32Array(2);
+  references[0] = 0.5 / SHADER_TEXTURE_SIZE;
+  references[1] = 0.5 / SHADER_TEXTURE_SIZE;
 
   return new THREE.BufferAttribute(references, 2);
 }
@@ -60,7 +53,6 @@ export function HelloShaderWorldScene({ onTestApiReady }: HelloShaderWorldSceneP
     () => ({
       uState: { value: null as THREE.Texture | null },
       uColorA: { value: new THREE.Color("#22d3ee") },
-      uColorB: { value: new THREE.Color("#0f172a") },
     }),
     [],
   );

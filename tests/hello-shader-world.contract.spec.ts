@@ -32,13 +32,26 @@ async function waitForTestApis(page: Page) {
 }
 
 async function resetSimulation(page: Page) {
-  await page.evaluate(async () => {
-    if (typeof window.__RESET_SHADER_SIM_FOR_TEST__ !== "function") {
-      throw new Error("window.__RESET_SHADER_SIM_FOR_TEST__ is not available.");
-    }
+  await expect
+    .poll(
+      async () => {
+        try {
+          await page.evaluate(async () => {
+            if (typeof window.__RESET_SHADER_SIM_FOR_TEST__ !== "function") {
+              throw new Error("window.__RESET_SHADER_SIM_FOR_TEST__ is not available.");
+            }
 
-    await window.__RESET_SHADER_SIM_FOR_TEST__();
-  });
+            await window.__RESET_SHADER_SIM_FOR_TEST__();
+          });
+
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 20000 },
+    )
+    .toBe(true);
 }
 
 async function getShaderContractText(page: Page, frame: number) {
