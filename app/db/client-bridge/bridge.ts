@@ -1,4 +1,9 @@
-import type { CameraState, SpriteRecord, SpriteUpsertInput } from "~/db/types";
+import type {
+  CameraState,
+  SimulationSnapshotUpsertInput,
+  SpriteRecord,
+  SpriteUpsertInput,
+} from "~/db/types";
 import type {
   ContractScope,
   DbTable,
@@ -307,6 +312,25 @@ export async function persistCameraState(nextState: CameraState, projectId?: str
     requestId: crypto.randomUUID(),
     projectId: resolvedProjectId,
     payload: nextState,
+  });
+}
+
+export async function persistSimulationSnapshot(
+  nextSnapshot: SimulationSnapshotUpsertInput,
+  projectId?: string,
+) {
+  const resolvedProjectId = resolveProjectId(projectId);
+  logger.info("Persist simulation snapshot milestone.", {
+    projectId: resolvedProjectId,
+    milestoneId: nextSnapshot.milestoneId,
+    frame: nextSnapshot.frame,
+  });
+  await initializeDbBridge();
+  return sendRequest<null>({
+    type: "SAVE_SIMULATION_SNAPSHOT",
+    requestId: crypto.randomUUID(),
+    projectId: resolvedProjectId,
+    payload: nextSnapshot,
   });
 }
 

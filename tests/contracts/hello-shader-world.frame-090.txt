@@ -1,0 +1,14 @@
+[shader]
+frame=90
+texture_size=32
+particle_count=1024
+avg_x=0.07
+avg_y=-0.06
+avg_vx=0.00
+avg_vy=0.00
+avg_speed=0.01
+max_radius=0.76
+checksum=4376.02
+sample_0=-0.55,-0.34,0.00,-0.02
+sample_1=0.45,0.58,0.01,-0.01
+sample_2=-0.07,-0.16,-0.02,0.02

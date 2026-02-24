@@ -1,7 +1,12 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import sqliteWasmUrl from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url";
 
-import type { CameraState, SpriteRecord, VariableRecord } from "../types";
+import type {
+  CameraState,
+  SimulationSnapshotUpsertInput,
+  SpriteRecord,
+  VariableRecord,
+} from "../types";
 import { createLogger } from "../../lib/logger";
 
 import type { DbTable, WorkerRequest, WorkerResponse } from "./messages";
@@ -65,6 +70,27 @@ function parseCameraState(raw: string): CameraState {
   return {
     position: next.position,
     target: next.target,
+  };
+}
+
+function validateSimulationSnapshotPayload(payload: SimulationSnapshotUpsertInput) {
+  const milestoneId = payload.milestoneId.trim();
+  if (milestoneId.length === 0) {
+    throw new Error("Simulation snapshot milestoneId must be non-empty.");
+  }
+
+  if (!Number.isInteger(payload.frame) || payload.frame < 0) {
+    throw new Error("Simulation snapshot frame must be a non-negative integer.");
+  }
+
+  if (!isNumberTriple(payload.payload)) {
+    throw new Error("Simulation snapshot payload must be a finite [x, y, z] triple.");
+  }
+
+  return {
+    milestoneId,
+    frame: payload.frame,
+    payload: payload.payload,
   };
 }
 
@@ -353,6 +379,23 @@ async function handleRequest(message: WorkerRequest) {
       postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
       return;
     }
+    case "SAVE_SIMULATION_SNAPSHOT": {
+      const repository = await getWorkerRepository();
+      const normalizedPayload = validateSimulationSnapshotPayload(message.payload);
+      repository.upsertSimulationSnapshot(normalizedPayload, message.projectId);
+
+      logger.info("Persist simulation milestone snapshot.", {
+        requestId: message.requestId,
+        projectId: message.projectId,
+        milestoneId: normalizedPayload.milestoneId,
+        frame: normalizedPayload.frame,
+      });
+
+      emitTableUpdated("simulation_snapshots");
+
+      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      return;
+    }
     case "GET_PROJECT_CONTRACT_TEXT": {
       const repository = await getWorkerRepository();
       ensureProjectSeeded(repository, message.projectId);
@@ -381,6 +424,7 @@ async function handleRequest(message: WorkerRequest) {
 
       emitTableUpdated("sprites");
       emitTableUpdated("variables");
+      emitTableUpdated("simulation_snapshots");
 
       postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
       return;

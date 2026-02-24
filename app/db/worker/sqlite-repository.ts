@@ -1,5 +1,10 @@
 import type { ContractScope } from "~/db/worker/messages";
-import type { SpriteRecord, VariableRecord } from "~/db/types";
+import type {
+  SimulationSnapshotRecord,
+  SimulationSnapshotUpsertInput,
+  SpriteRecord,
+  VariableRecord,
+} from "~/db/types";
 
 /** Represent one sqlite row mapped as an object with unknown scalar values. */
 type SqliteObjectRow = Record<string, unknown>;
@@ -17,6 +22,12 @@ type ContractSpriteRow = {
 type ContractVariableRow = {
   name: string;
   value: string;
+};
+
+type ContractSimulationMilestoneRow = {
+  milestoneId: string;
+  frame: number;
+  payload: [string, string, string];
 };
 
 /** Define the minimal sqlite-wasm DB interface consumed by the repository wrapper. */
@@ -105,11 +116,33 @@ export class SqliteRepository {
     this.execute(
       "CREATE TABLE IF NOT EXISTS sprites (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, type TEXT NOT NULL, pos_x REAL NOT NULL, pos_y REAL NOT NULL, pos_z REAL NOT NULL, metadata TEXT NOT NULL)",
     );
+    this.execute(
+      "CREATE TABLE IF NOT EXISTS simulation_snapshots (project_id TEXT NOT NULL, milestone_id TEXT NOT NULL, frame INTEGER NOT NULL, payload_x REAL NOT NULL, payload_y REAL NOT NULL, payload_z REAL NOT NULL, UNIQUE(project_id, milestone_id))",
+    );
 
     this.migrateLegacySpritesProjectScope();
     this.migrateLegacyVariablesProjectScope();
     this.execute("CREATE INDEX IF NOT EXISTS idx_sprites_project_id ON sprites(project_id)");
     this.execute("CREATE INDEX IF NOT EXISTS idx_variables_project_id ON variables(project_id)");
+    this.execute(
+      "CREATE INDEX IF NOT EXISTS idx_simulation_snapshots_project_frame ON simulation_snapshots(project_id, frame, milestone_id)",
+    );
+  }
+
+  public upsertSimulationSnapshot(payload: SimulationSnapshotUpsertInput, projectId: string) {
+    const normalizedProjectId = normalizeProjectId(projectId);
+
+    this.execute(
+      "INSERT INTO simulation_snapshots (project_id, milestone_id, frame, payload_x, payload_y, payload_z) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, milestone_id) DO UPDATE SET frame = excluded.frame, payload_x = excluded.payload_x, payload_y = excluded.payload_y, payload_z = excluded.payload_z",
+      [
+        normalizedProjectId,
+        payload.milestoneId,
+        payload.frame,
+        payload.payload[0],
+        payload.payload[1],
+        payload.payload[2],
+      ],
+    );
   }
 
   /** Read the number of persisted sprites for one project. */
@@ -232,6 +265,7 @@ export class SqliteRepository {
 
     this.execute("DELETE FROM sprites WHERE project_id = ?", [normalizedProjectId]);
     this.execute("DELETE FROM variables WHERE project_id = ?", [normalizedProjectId]);
+    this.execute("DELETE FROM simulation_snapshots WHERE project_id = ?", [normalizedProjectId]);
   }
 
   /** Return deterministic text contract for one project and selected scope. */
@@ -240,6 +274,7 @@ export class SqliteRepository {
 
     const spriteSection = this.formatSpriteSection(normalizedProjectId);
     const variableSection = this.formatVariableSection(normalizedProjectId);
+    const simulationMilestoneSection = this.formatSimulationMilestoneSection(normalizedProjectId);
 
     if (scope === "sprites") {
       return `${spriteSection}\n`;
@@ -249,7 +284,66 @@ export class SqliteRepository {
       return `${variableSection}\n`;
     }
 
+    if (scope === "simulation_milestones") {
+      return `${simulationMilestoneSection}\n`;
+    }
+
     return `${spriteSection}\n\n${variableSection}\n`;
+  }
+
+  private formatSimulationMilestoneSection(projectId: string) {
+    const rows = this.selectAll(
+      "SELECT milestone_id, frame, payload_x, payload_y, payload_z FROM simulation_snapshots WHERE project_id = ?",
+      [projectId],
+    );
+
+    const projected = rows
+      .map<ContractSimulationMilestoneRow>((row, index) => ({
+        milestoneId: escapeField(
+          this.toStringValue(row.milestone_id, `simulation_snapshots[${index}].milestone_id`),
+        ),
+        frame: this.toFiniteNumber(row.frame, `simulation_snapshots[${index}].frame`),
+        payload: [
+          formatNumber(this.toFiniteNumber(row.payload_x, `simulation_snapshots[${index}].payload_x`)),
+          formatNumber(this.toFiniteNumber(row.payload_y, `simulation_snapshots[${index}].payload_y`)),
+          formatNumber(this.toFiniteNumber(row.payload_z, `simulation_snapshots[${index}].payload_z`)),
+        ],
+      }))
+      .sort((left, right) => {
+        const frameComparison = left.frame - right.frame;
+        if (frameComparison !== 0) {
+          return frameComparison;
+        }
+
+        return left.milestoneId.localeCompare(right.milestoneId);
+      });
+
+    const lines = ["[simulation_milestones]"];
+    for (const milestone of projected) {
+      lines.push(`milestone_id: ${milestone.milestoneId}`);
+      lines.push(`frame: ${milestone.frame}`);
+      lines.push(`payload: ${milestone.payload.join("|")}`);
+      lines.push("---");
+    }
+
+    return lines.join("\n");
+  }
+
+  public fetchSimulationSnapshots(projectId: string): SimulationSnapshotRecord[] {
+    const normalizedProjectId = normalizeProjectId(projectId);
+    const rows = this.selectAll(
+      "SELECT project_id, milestone_id, frame, payload_x, payload_y, payload_z FROM simulation_snapshots WHERE project_id = ? ORDER BY frame ASC, milestone_id ASC",
+      [normalizedProjectId],
+    );
+
+    return rows.map((row, index) => ({
+      project_id: this.toStringValue(row.project_id, `simulation_snapshots[${index}].project_id`),
+      milestone_id: this.toStringValue(row.milestone_id, `simulation_snapshots[${index}].milestone_id`),
+      frame: this.toFiniteNumber(row.frame, `simulation_snapshots[${index}].frame`),
+      payload_x: this.toFiniteNumber(row.payload_x, `simulation_snapshots[${index}].payload_x`),
+      payload_y: this.toFiniteNumber(row.payload_y, `simulation_snapshots[${index}].payload_y`),
+      payload_z: this.toFiniteNumber(row.payload_z, `simulation_snapshots[${index}].payload_z`),
+    }));
   }
 
   /** Format deterministic sprite contract section for one project. */

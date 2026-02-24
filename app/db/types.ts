@@ -39,3 +39,18 @@ export type CameraState = {
   position: [number, number, number];
   target: [number, number, number];
 };
+
+export type SimulationSnapshotRecord = {
+  project_id: string;
+  milestone_id: string;
+  frame: number;
+  payload_x: number;
+  payload_y: number;
+  payload_z: number;
+};
+
+export type SimulationSnapshotUpsertInput = {
+  milestoneId: string;
+  frame: number;
+  payload: [number, number, number];
+};

@@ -8,7 +8,8 @@
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "test:e2e": "playwright test",
-    "test:e2e:hello-world": "playwright test tests/hello-world*.spec.ts --max-failures=1 --reporter=list"
+    "test:e2e:hello-world": "playwright test tests/hello-world*.spec.ts --max-failures=1 --reporter=list",
+    "test:e2e:hello-shader-world": "playwright test tests/hello-shader-world*.spec.ts --max-failures=1 --reporter=list"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",

@@ -5,6 +5,7 @@ import {
   deleteProjectData,
   getProjectContractText,
 } from "~/db/client-bridge/bridge";
+import type { ContractScope } from "~/db/worker/messages";
 import type {
   CameraPersistenceTestApi,
 } from "~/features/3d/camera-persistence-controls";
@@ -16,7 +17,7 @@ const UI_PROJECT_ID_STORAGE_KEY = "particle-life:ui-project-id";
 
 declare global {
   interface Window {
-    __GET_DB_CONTRACT_TEXT__?: (projectId?: string) => Promise<string>;
+    __GET_DB_CONTRACT_TEXT__?: (projectId?: string, scope?: ContractScope) => Promise<string>;
     __APPLY_CAMERA_ACTION_FOR_TEST__?: (action: CameraAction, projectId?: string) => Promise<void>;
     __DELETE_PROJECT_DATA__?: (projectId?: string) => Promise<void>;
   }
@@ -71,8 +72,8 @@ export function ParticlePage() {
       return;
     }
 
-    window.__GET_DB_CONTRACT_TEXT__ = (requestedProjectId) =>
-      getProjectContractText(requestedProjectId ?? projectId);
+    window.__GET_DB_CONTRACT_TEXT__ = (requestedProjectId, scope) =>
+      getProjectContractText(requestedProjectId ?? projectId, scope);
     window.__APPLY_CAMERA_ACTION_FOR_TEST__ = async (action, requestedProjectId) => {
       const targetProjectId = requestedProjectId ?? projectId;
       if (targetProjectId !== projectId) {

@@ -1,10 +1,15 @@
-import type { CameraState, SpriteRecord, SpriteUpsertInput } from "~/db/types";
+import type {
+  CameraState,
+  SimulationSnapshotUpsertInput,
+  SpriteRecord,
+  SpriteUpsertInput,
+} from "~/db/types";
 
 /** Define tables that can emit live update events from the worker. */
-export type DbTable = "variables" | "sprites";
+export type DbTable = "variables" | "sprites" | "simulation_snapshots";
 
 /** Define deterministic DB contract export scopes used by integration tests. */
-export type ContractScope = "all" | "sprites" | "variables";
+export type ContractScope = "all" | "sprites" | "variables" | "simulation_milestones";
 
 /** Define the request contract sent from main thread to the SQLite worker. */
 export type WorkerRequest =
@@ -14,6 +19,12 @@ export type WorkerRequest =
   | { type: "upsert_sprites"; requestId: string; projectId: string; payload: SpriteUpsertInput[] }
   | { type: "GET_CAMERA_STATE"; requestId: string; projectId: string }
   | { type: "SAVE_CAMERA_STATE"; requestId: string; projectId: string; payload: CameraState }
+  | {
+      type: "SAVE_SIMULATION_SNAPSHOT";
+      requestId: string;
+      projectId: string;
+      payload: SimulationSnapshotUpsertInput;
+    }
   | {
       type: "GET_PROJECT_CONTRACT_TEXT";
       requestId: string;

@@ -1,36 +1,148 @@
 import { OrbitControls } from "@react-three/drei";
-import { useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 import fragmentShader from "~/features/3d/shaders/hello-shader-world.frag";
 import vertexShader from "~/features/3d/shaders/hello-shader-world.vert";
+import {
+  HelloShaderWorldSimulation,
+  SHADER_TEXTURE_SIZE,
+} from "~/features/3d/hello-shader-world-simulation";
+import { createLogger } from "~/lib/logger";
 
-function createRandomColor() {
-  return new THREE.Color(Math.random(), Math.random(), Math.random());
-}
+/** Provide scoped logs for shader scene stepping and milestone publication. */
+const logger = createLogger("hello-shader-world-scene");
 
+/** Define test-only APIs exposed from this scene to the route page wrapper. */
+export type ShaderWorldTestApi = {
+  getCurrentFrame: () => number;
+  getShaderContractText: (frame?: number) => string;
+  resetSimulation: () => void;
+};
+
+/** Define scene props used by runtime/test wiring. */
+type HelloShaderWorldSceneProps = {
+  onTestApiReady?: (api: ShaderWorldTestApi | null) => void;
+};
+
+/** Create the static position attribute expected by Three Points geometry. */
 function createPositionAttribute() {
-  return new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3);
+  return new THREE.BufferAttribute(new Float32Array(SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE * 3), 3);
 }
 
-export function HelloShaderWorldScene() {
+/** Create a UV reference per particle texel for shader texture lookup. */
+function createReferenceAttribute() {
+  const references = new Float32Array(SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE * 2);
+
+  for (let yIndex = 0; yIndex < SHADER_TEXTURE_SIZE; yIndex += 1) {
+    for (let xIndex = 0; xIndex < SHADER_TEXTURE_SIZE; xIndex += 1) {
+      const index = yIndex * SHADER_TEXTURE_SIZE + xIndex;
+      const offset = index * 2;
+      references[offset] = (xIndex + 0.5) / SHADER_TEXTURE_SIZE;
+      references[offset + 1] = (yIndex + 0.5) / SHADER_TEXTURE_SIZE;
+    }
+  }
+
+  return new THREE.BufferAttribute(references, 2);
+}
+
+export function HelloShaderWorldScene({ onTestApiReady }: HelloShaderWorldSceneProps) {
+  const { gl } = useThree();
+  const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
+
+  const [error, setError] = useState<Error | null>(null);
+
   const positionAttribute = useMemo(() => createPositionAttribute(), []);
-  const randomColor = useMemo(() => createRandomColor(), []);
+  const referenceAttribute = useMemo(() => createReferenceAttribute(), []);
+
+  const uniforms = useMemo(
+    () => ({
+      uState: { value: null as THREE.Texture | null },
+      uColorA: { value: new THREE.Color("#22d3ee") },
+      uColorB: { value: new THREE.Color("#0f172a") },
+    }),
+    [],
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  useEffect(() => {
+    try {
+      const simulation = new HelloShaderWorldSimulation(gl);
+      simulationRef.current = simulation;
+      uniforms.uState.value = simulation.getStateTexture();
+    } catch (initializationError: unknown) {
+      setError(
+        initializationError instanceof Error
+          ? initializationError
+          : new Error("Failed to initialize hello-shader-world simulation."),
+      );
+    }
+
+    return () => {
+      simulationRef.current?.dispose();
+      simulationRef.current = null;
+      uniforms.uState.value = null;
+    };
+  }, [gl, uniforms]);
+
+  useEffect(() => {
+    if (!onTestApiReady) {
+      return;
+    }
+
+    onTestApiReady({
+      getCurrentFrame: () => simulationRef.current?.getCurrentFrame() ?? 0,
+      getShaderContractText: (frame) => {
+        const simulation = simulationRef.current;
+        if (!simulation) {
+          throw new Error("Shader simulation is not ready yet.");
+        }
+
+        return simulation.getShaderContractText(frame);
+      },
+      resetSimulation: () => {
+        const simulation = simulationRef.current;
+        if (!simulation) {
+          throw new Error("Shader simulation is not ready yet.");
+        }
+
+        simulation.reset();
+        uniforms.uState.value = simulation.getStateTexture();
+      },
+    });
+
+    return () => {
+      onTestApiReady(null);
+    };
+  }, [onTestApiReady, uniforms]);
+
+  useFrame(() => {
+    const simulation = simulationRef.current;
+    if (!simulation) {
+      return;
+    }
+
+    const milestone = simulation.step();
+    uniforms.uState.value = simulation.getStateTexture();
+
+    if (milestone) {
+      logger.debug("Publish shader milestone.", { frame: milestone.frame });
+    }
+  });
 
   return (
     <>
-      <gridHelper args={[12, 12, "#1d4ed8", "#1e293b"]} />
+      <gridHelper args={[12, 12, "#d97706", "#1f2937"]} />
       <points>
         <bufferGeometry>
           <primitive attach="attributes-position" object={positionAttribute} />
+          <primitive attach="attributes-aReference" object={referenceAttribute} />
         </bufferGeometry>
-        <shaderMaterial
-          vertexShader={vertexShader}
-          fragmentShader={fragmentShader}
-          uniforms={{
-            uColor: { value: randomColor },
-          }}
-        />
+        <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} />
       </points>
       <OrbitControls />
     </>
