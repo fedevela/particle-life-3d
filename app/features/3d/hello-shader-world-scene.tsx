@@ -23,6 +23,7 @@ export type ShaderWorldTestApi = {
 
 /** Define scene props used by runtime/test wiring. */
 type HelloShaderWorldSceneProps = {
+  seed: string;
   onTestApiReady?: (api: ShaderWorldTestApi | null) => void;
 };
 
@@ -40,7 +41,7 @@ function createReferenceAttribute() {
   return new THREE.BufferAttribute(references, 2);
 }
 
-export function HelloShaderWorldScene({ onTestApiReady }: HelloShaderWorldSceneProps) {
+export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorldSceneProps) {
   const { gl } = useThree();
   const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
 
@@ -63,7 +64,7 @@ export function HelloShaderWorldScene({ onTestApiReady }: HelloShaderWorldSceneP
 
   useEffect(() => {
     try {
-      const simulation = new HelloShaderWorldSimulation(gl);
+      const simulation = new HelloShaderWorldSimulation(gl, seed);
       simulationRef.current = simulation;
       uniforms.uState.value = simulation.getStateTexture();
     } catch (initializationError: unknown) {
@@ -79,7 +80,7 @@ export function HelloShaderWorldScene({ onTestApiReady }: HelloShaderWorldSceneP
       simulationRef.current = null;
       uniforms.uState.value = null;
     };
-  }, [gl, uniforms]);
+  }, [gl, seed, uniforms]);
 
   useEffect(() => {
     if (!onTestApiReady) {

@@ -1,32 +1,20 @@
 uniform float uFrame;
+uniform float uSeed;
+
+float hashScalar(vec3 value) {
+  return fract(sin(dot(value, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+}
 
 void main() {
-  // Current pixel coordinates in the simulation texture (one pixel == one particle slot).
   vec2 texel = gl_FragCoord.xy;
-  // Flatten 2D texel coordinates into a stable 1D particle index.
-  // resolution.x is the texture width provided by the runtime (Three.js / GPUComputationRenderer).
   float index = (floor(texel.y) * resolution.x) + floor(texel.x);
+  vec2 uv = texel / resolution.xy;
+  vec2 previousPosition = texture2D(textureState, uv).rg;
 
-  // Build an angle for circular motion:
-  // - uFrame term advances the orbit over time
-  // - index term gives each particle a phase offset to avoid overlap
-  float phase = (uFrame * 0.010) + (index * 0.0035);
-  // Per-particle sinusoidal offset used to slightly vary each particle's orbit radius.
-  float radialOffset = sin(index * 0.013);
-  // Base radius plus a small offset range (~±0.04) to create ring thickness/texture.
-  float radius = 0.30 + (0.04 * radialOffset);
+  float randomAngle = hashScalar(vec3(index, uFrame, uSeed)) * 6.28318530718;
+  float randomSpeed = 0.006 + (hashScalar(vec3(index + 19.0, uFrame + 31.0, uSeed + 43.0)) * 0.008);
+  vec2 step = vec2(cos(randomAngle), sin(randomAngle)) * randomSpeed;
+  vec2 position = (uFrame < 0.5) ? step : (previousPosition + step);
 
-  // Position on a circle (x = r cos θ, y = r sin θ).
-  float x = radius * cos(phase);
-  float y = radius * sin(phase);
-  // First derivative of position with respect to phase/time (tangent velocity on the orbit).
-  // Signs ensure clockwise/counterclockwise tangential motion consistent with phase progression.
-  float vx = -radius * 0.010;
-  float vy = radius * 0.010;
-
-  // Pack particle state into RGBA channels:
-  // R,G -> position (x,y)
-  // B,A -> velocity (vx,vy)
-  // This texture is consumed by the render/update passes in later stages.
-  gl_FragColor = vec4(x, y, vx, vy);
+  gl_FragColor = vec4(position, step);
 }

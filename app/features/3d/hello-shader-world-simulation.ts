@@ -36,6 +36,7 @@ export class HelloShaderWorldSimulation {
   /** Keep current simulation frame + elapsed time progression. */
   private frame = 0;
   private elapsedTimeSeconds = 0;
+  private readonly seedValue: number;
 
   /** Store published contracts by exact milestone frame number. */
   private readonly milestoneContracts = new Map<number, string>();
@@ -44,8 +45,9 @@ export class HelloShaderWorldSimulation {
   private readonly readbackBuffer = new Float32Array(SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE * 4);
 
   /** Initialize GPU simulation resources and seed frame 0 state. */
-  constructor(renderer: THREE.WebGLRenderer) {
+  constructor(renderer: THREE.WebGLRenderer, seed: string) {
     this.renderer = renderer;
+    this.seedValue = this.hashSeed(seed);
     this.gpuCompute = new GPUComputationRenderer(SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.renderer);
 
     const initialTexture = this.gpuCompute.createTexture();
@@ -59,6 +61,7 @@ export class HelloShaderWorldSimulation {
     const stateVariable = this.gpuCompute.addVariable("textureState", computeShader, initialTexture);
     this.gpuCompute.setVariableDependencies(stateVariable, [stateVariable]);
     stateVariable.material.uniforms.uFrame = { value: 0 };
+    stateVariable.material.uniforms.uSeed = { value: this.seedValue };
     this.stateVariable = stateVariable;
 
     const error = this.gpuCompute.init();
@@ -131,7 +134,18 @@ export class HelloShaderWorldSimulation {
   /** Execute one GPU computation pass configured for the provided frame number. */
   private computeFrame(frame: number) {
     this.stateVariable.material.uniforms.uFrame.value = frame;
+    this.stateVariable.material.uniforms.uSeed.value = this.seedValue;
     this.gpuCompute.compute();
+  }
+
+  private hashSeed(seed: string) {
+    let hash = 2166136261;
+    for (let index = 0; index < seed.length; index += 1) {
+      hash ^= seed.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return ((hash >>> 0) % 1000000) / 1000000;
   }
 
   /** Capture and store milestone text when this frame is configured as a report point. */

@@ -18,17 +18,21 @@ function resolvePageConfiguration() {
   if (typeof window === "undefined") {
     return {
       isTestMode: false,
+      seed: null as string | null,
     };
   }
 
   const searchParams = new URLSearchParams(window.location.search);
   return {
     isTestMode: searchParams.get("testMode") === "true",
+    seed: searchParams.get("seed"),
   };
 }
 
 export function HelloShaderWorldPage() {
-  const { isTestMode } = useMemo(() => resolvePageConfiguration(), []);
+  const { isTestMode, seed } = useMemo(() => resolvePageConfiguration(), []);
+  const sessionSeedRef = useRef<string>(seed ?? crypto.randomUUID());
+  const resolvedSeed = seed ?? sessionSeedRef.current;
   const testApiRef = useRef<ShaderWorldTestApi | null>(null);
 
   useEffect(() => {
@@ -70,6 +74,7 @@ export function HelloShaderWorldPage() {
     <section className="h-full w-full">
       <Canvas camera={{ position: [0, 0, 5], fov: 55 }}>
         <HelloShaderWorldScene
+          seed={resolvedSeed}
           onTestApiReady={(api) => {
             testApiRef.current = api;
           }}

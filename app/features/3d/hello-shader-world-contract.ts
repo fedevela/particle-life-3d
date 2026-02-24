@@ -11,6 +11,28 @@ function formatTwoDecimals(value: number) {
   return formatted === "-0.00" ? "0.00" : formatted;
 }
 
+function toStableSixDecimals(value: number) {
+  const formatted = value.toFixed(6);
+  return formatted === "-0.000000" ? "0.000000" : formatted;
+}
+
+function toHex16(value: bigint) {
+  return value.toString(16).padStart(16, "0");
+}
+
+function updateFvn1a64(hash: bigint, input: string) {
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  let nextHash = hash;
+
+  for (let index = 0; index < input.length; index += 1) {
+    nextHash ^= BigInt(input.charCodeAt(index));
+    nextHash = (nextHash * prime) & mask;
+  }
+
+  return nextHash;
+}
+
 /** Read one vec4 state tuple from the flat readback buffer. */
 function readStateTuple(values: Float32Array, index: number) {
   const offset = index * 4;
@@ -42,7 +64,8 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
   let sumVy = 0;
   let sumSpeed = 0;
   let maxRadius = 0;
-  let checksum = 0;
+  let checksumA = 0xcbf29ce484222325n;
+  let checksumB = 0x84222325cbf29cen;
 
   for (let index = 0; index < particleCount; index += 1) {
     const next = readStateTuple(snapshot.values, index);
@@ -55,8 +78,26 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
     sumVy += next.vy;
     sumSpeed += speed;
     maxRadius = Math.max(maxRadius, radius);
-    checksum += (index + 1) * ((next.x * 0.37) + (next.y * 0.53) + (next.vx * 0.71) + (next.vy * 0.97));
+    const rowA = [
+      index,
+      toStableSixDecimals(next.x),
+      toStableSixDecimals(next.y),
+      toStableSixDecimals(next.vx),
+      toStableSixDecimals(next.vy),
+    ].join("|");
+    const rowB = [
+      index,
+      toStableSixDecimals(next.vy),
+      toStableSixDecimals(next.vx),
+      toStableSixDecimals(next.y),
+      toStableSixDecimals(next.x),
+    ].join("|");
+
+    checksumA = updateFvn1a64(checksumA, rowA);
+    checksumB = updateFvn1a64(checksumB, rowB);
   }
+
+  const checksum = `${toHex16(checksumA)}${toHex16(checksumB)}`;
 
   const sampleIndexes = [0, Math.floor(particleCount / 2), particleCount - 1];
   const sampleLines = sampleIndexes.map((sampleIndex, orderIndex) => {
@@ -84,7 +125,7 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
     `avg_vy=${formatTwoDecimals(sumVy / particleCount)}`,
     `avg_speed=${formatTwoDecimals(sumSpeed / particleCount)}`,
     `max_radius=${formatTwoDecimals(maxRadius)}`,
-    `checksum=${formatTwoDecimals(checksum)}`,
+    `checksum=${checksum}`,
     ...sampleLines,
   ];
 
