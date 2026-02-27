@@ -17,6 +17,9 @@ permissions:
 jobs:
   queen:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && github.event.label.name == 'phase:queen')
+    concurrency:
+      group: queen-issue-${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - name: Resolve issue
@@ -40,6 +43,63 @@ jobs:
             core.setOutput('number', String(issue.data.number))
             core.setOutput('title', issue.data.title || '')
             core.setOutput('body', issue.data.body || '')
+      - name: Acquire lock
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const marker = '<!-- openhands-swarm:lock -->'
+            const issueNumber = Number(process.env.ISSUE_NUMBER)
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const runOwner = `run-${context.runId}`
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100
+            })
+            const existing = comments.find((comment) => (comment.body || '').includes(marker))
+            const parseOwner = (text) => {
+              const match = text.match(/^Owner:\s*(.+)$/m)
+              return match ? match[1].trim() : ''
+            }
+            const parseState = (text) => {
+              const match = text.match(/^State:\s*(.+)$/m)
+              return match ? match[1].trim() : ''
+            }
+            if (existing) {
+              const existingOwner = parseOwner(existing.body || '')
+              const existingState = parseState(existing.body || '')
+              if (existingState === 'held' && existingOwner && existingOwner !== runOwner) {
+                core.setFailed(`Lock is held by ${existingOwner}`)
+                return
+              }
+            }
+            const body = `${marker}\nOwner: ${runOwner}\nState: held`
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body
+              })
+            }
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              labels: ['lock']
+            })
       - name: Build queen prompt
         id: prompt
         run: |
@@ -138,4 +198,53 @@ jobs:
                 issue_number: issueNumber,
                 labels: ['phase:triad']
               })
+            }
+      - name: Release lock
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const marker = '<!-- openhands-swarm:lock -->'
+            const issueNumber = Number(process.env.ISSUE_NUMBER)
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const runOwner = `run-${context.runId}`
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100
+            })
+            const existing = comments.find((comment) => (comment.body || '').includes(marker))
+            let canRelease = false
+            if (existing) {
+              const ownerMatch = (existing.body || '').match(/^Owner:\s*(.+)$/m)
+              const existingOwner = ownerMatch ? ownerMatch[1].trim() : ''
+              if (existingOwner === runOwner) {
+                canRelease = true
+                const body = `${marker}\nOwner: ${runOwner}\nState: released`
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body
+                })
+              }
+            }
+            if (canRelease) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  name: 'lock'
+                })
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error
+                }
+              }
             }
