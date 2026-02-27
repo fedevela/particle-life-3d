@@ -4,4 +4,4 @@ count=1
 
 [variables]
 count=1
-0|camera_state|{"position":[3.6361965624454995,3.6361965624455,5.45429484366825],"target":[0,0,0]}
+0|camera_state|{"movementParams":{"acceleration":0.0012,"damping":0.988,"directionJitter":0.06,"magnitudeJitter":0.25,"maxSpeed":0.028},"position":[3.6361965624454995,3.6361965624455,5.45429484366825],"target":[0,0,0]}

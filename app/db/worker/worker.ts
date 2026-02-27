@@ -8,6 +8,7 @@ import type {
   VariableRecord,
 } from "../types";
 import { createLogger } from "../../lib/logger";
+import { parseHelloShaderWorldMovementParams } from "../../types/hello-shader-world-movement";
 
 import type { DbTable, WorkerRequest, WorkerResponse } from "./messages";
 import { SqliteRepository, type SqliteDatabase } from "./sqlite-repository";
@@ -61,6 +62,7 @@ function parseCameraState(raw: string): CameraState {
   const next = {
     position: parsedRecord.position ?? null,
     target: parsedRecord.target ?? null,
+    movementParams: parseHelloShaderWorldMovementParams(parsedRecord.movementParams),
   };
 
   if (!isNumberTriple(next.position) || !isNumberTriple(next.target)) {
@@ -70,6 +72,7 @@ function parseCameraState(raw: string): CameraState {
   return {
     position: next.position,
     target: next.target,
+    movementParams: next.movementParams,
   };
 }
 

@@ -1,3 +1,5 @@
+import type { HelloShaderWorldMovementParams } from "~/types/hello-shader-world-movement";
+
 /** Define a JSON object payload used for flexible metadata fields. */
 export type JsonRecord = Record<string, unknown>;
 
@@ -38,6 +40,7 @@ export type SpriteUpsertInput = {
 export type CameraState = {
   position: [number, number, number];
   target: [number, number, number];
+  movementParams: HelloShaderWorldMovementParams | null;
 };
 
 export type SimulationSnapshotRecord = {

@@ -4,6 +4,11 @@ import * as THREE from "three";
 import computeShader from "~/features/3d/shaders/hello-shader-world.compute.frag";
 import { getShaderContractText } from "~/features/3d/hello-shader-world-contract";
 import { createLogger } from "~/lib/logger";
+import {
+  clampHelloShaderWorldMovementParams,
+  DEFAULT_HELLO_SHADER_WORLD_MOVEMENT_PARAMS,
+  type HelloShaderWorldMovementParams,
+} from "~/types/hello-shader-world-movement";
 
 /** Define the square texture size used by GPU simulation state. */
 export const SHADER_TEXTURE_SIZE = 32;
@@ -12,6 +17,7 @@ export const SHADER_PARTICLE_CAPACITY = SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZ
 export const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 /** Define a fixed simulation timestep used for deterministic frame progression. */
 const FIXED_TIME_STEP_SECONDS = 1 / 60;
+const TAU = Math.PI * 2;
 /** Provide scoped logs for shader simulation lifecycle and milestones. */
 const logger = createLogger("hello-shader-world-simulation");
 
@@ -40,6 +46,7 @@ export class HelloShaderWorldSimulation {
   private readonly seedText: string;
   private readonly seedValue: number;
   private rngState: number;
+  private movementParams: HelloShaderWorldMovementParams = DEFAULT_HELLO_SHADER_WORLD_MOVEMENT_PARAMS;
 
   /** Store published contracts by exact milestone frame number. */
   private readonly milestoneContracts = new Map<number, string>();
@@ -73,6 +80,11 @@ export class HelloShaderWorldSimulation {
     this.gpuCompute.setVariableDependencies(stateVariable, [stateVariable]);
     stateVariable.material.uniforms.uFrame = { value: 0 };
     stateVariable.material.uniforms.uSeed = { value: this.seedValue };
+    stateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
+    stateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
+    stateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
+    stateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
+    stateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
     this.stateVariable = stateVariable;
 
     const error = this.gpuCompute.init();
@@ -98,6 +110,10 @@ export class HelloShaderWorldSimulation {
   /** Return current simulation frame number. */
   public getCurrentFrame() {
     return this.frame;
+  }
+
+  public setMovementParams(nextParams: HelloShaderWorldMovementParams) {
+    this.movementParams = clampHelloShaderWorldMovementParams(nextParams);
   }
 
   /** Reset simulation progression and clear all previously captured milestones. */
@@ -135,10 +151,13 @@ export class HelloShaderWorldSimulation {
       }
 
       const offset = index * 4;
-      data[offset] = 0;
-      data[offset + 1] = 0;
-      data[offset + 2] = 0;
-      data[offset + 3] = 0;
+      const spawnAngle = this.nextRandom() * TAU;
+      const spawnRadius = this.nextRandom() * 0.04;
+      const spawnSpeed = this.movementParams.maxSpeed * (0.35 + (this.nextRandom() * 0.35));
+      data[offset] = Math.cos(spawnAngle) * spawnRadius;
+      data[offset + 1] = Math.sin(spawnAngle) * spawnRadius;
+      data[offset + 2] = Math.cos(spawnAngle) * spawnSpeed;
+      data[offset + 3] = Math.sin(spawnAngle) * spawnSpeed;
       this.markParticleActive(index);
       addedIndexes.push(index);
       added += 1;
@@ -207,6 +226,11 @@ export class HelloShaderWorldSimulation {
   private computeFrame(frame: number) {
     this.stateVariable.material.uniforms.uFrame.value = frame;
     this.stateVariable.material.uniforms.uSeed.value = this.seedValue;
+    this.stateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
+    this.stateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
+    this.stateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
+    this.stateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
+    this.stateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
     this.gpuCompute.compute();
   }
 

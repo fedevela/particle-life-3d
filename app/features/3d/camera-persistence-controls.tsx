@@ -7,6 +7,8 @@ import { CAMERA_ACTION_STEP_VALUES, type CameraAction } from "~/features/3d/came
 import { loadCameraState, persistCameraState } from "~/db/client-bridge/bridge";
 import type { CameraState } from "~/db/types";
 import { createLogger } from "~/lib/logger";
+import { useUiStore } from "~/state/ui-store";
+import type { HelloShaderWorldMovementParams } from "~/types/hello-shader-world-movement";
 
 /** Define idle duration before camera state is persisted. */
 const IDLE_PERSIST_DELAY_MS = 5000;
@@ -29,12 +31,17 @@ type CameraPersistenceControlsProps = {
 };
 
 /** Capture current camera + target as a persisted state payload. */
-function captureCameraState(camera: THREE.Camera, controls: any): CameraState {
+function captureCameraState(
+  camera: THREE.Camera,
+  controls: any,
+  movementParams: HelloShaderWorldMovementParams,
+): CameraState {
   const perspectiveCamera = camera as THREE.PerspectiveCamera;
 
   return {
     position: [perspectiveCamera.position.x, perspectiveCamera.position.y, perspectiveCamera.position.z],
     target: [controls.target.x, controls.target.y, controls.target.z],
+    movementParams,
   };
 }
 
@@ -145,6 +152,8 @@ export function CameraPersistenceControls({
   const isDirtyRef = useRef(false);
   /** Store terminal load/save errors to surface through error boundaries. */
   const [error, setError] = useState<Error | null>(null);
+  const movementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
+  const setMovementParams = useUiStore((state) => state.setHelloShaderWorldMovementParams);
 
   if (error) {
     throw error;
@@ -167,6 +176,9 @@ export function CameraPersistenceControls({
           savedState.position[2],
         );
         controlsRef.current?.target.set(savedState.target[0], savedState.target[1], savedState.target[2]);
+        if (savedState.movementParams !== null) {
+          setMovementParams(savedState.movementParams);
+        }
         controlsRef.current?.update();
         logger.info("Restore camera state from persistence.", { projectId });
       })
@@ -185,7 +197,7 @@ export function CameraPersistenceControls({
         window.clearTimeout(idleTimerRef.current);
       }
     };
-  }, [camera, projectId]);
+  }, [camera, projectId, setMovementParams]);
 
   const saveCamera = useCallback(async () => {
     const controls = controlsRef.current;
@@ -193,10 +205,10 @@ export function CameraPersistenceControls({
       throw new Error("Cannot persist camera state before controls are ready.");
     }
 
-    const nextState = captureCameraState(camera, controls);
+    const nextState = captureCameraState(camera, controls, movementParams);
     await persistCameraState(nextState, projectId);
     logger.debug("Persist camera state snapshot.", { projectId });
-  }, [camera, projectId]);
+  }, [camera, movementParams, projectId]);
 
   /** Persist camera state when changes are pending. */
   const flushPersist = useCallback(() => {
@@ -236,6 +248,15 @@ export function CameraPersistenceControls({
     scheduleIdlePersist();
   }, [scheduleIdlePersist]);
 
+  useEffect(() => {
+    if (!controlsRef.current) {
+      return;
+    }
+
+    isDirtyRef.current = true;
+    scheduleIdlePersist();
+  }, [movementParams, scheduleIdlePersist]);
+
   const applyCameraActionForTest = useCallback(
     async (action: CameraAction) => {
       const controls = controlsRef.current;
@@ -250,11 +271,11 @@ export function CameraPersistenceControls({
 
       isDirtyRef.current = false;
       applyCameraAction(camera, controls, action);
-      const nextState = captureCameraState(camera, controls);
+      const nextState = captureCameraState(camera, controls, movementParams);
       await persistCameraState(nextState, projectId);
       logger.info("Applied test camera action.", { action, projectId });
     },
-    [camera, projectId],
+    [camera, movementParams, projectId],
   );
 
   useEffect(() => {
