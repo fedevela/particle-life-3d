@@ -20,7 +20,7 @@ export const DEFAULT_HELLO_SHADER_WORLD_MOVEMENT_PARAMS: HelloShaderWorldMovemen
   acceleration: 0.0012,
   directionJitter: 0.06,
   magnitudeJitter: 0.25,
-  damping: 0.988,
+  damping: 0.94,
   maxSpeed: 0.028,
 };
 

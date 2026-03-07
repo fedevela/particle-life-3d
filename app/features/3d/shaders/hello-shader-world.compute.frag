@@ -29,26 +29,23 @@ void main() {
 
   vec2 velocity = previousVelocity;
   float speed = length(velocity);
-  vec2 heading;
 
   if (speed < 0.000001) {
+    // Initialize with random direction when stationary
     float startAngle = hash12(vec2(index + (uSeed * 73.0), 11.0)) * TAU;
-    heading = vec2(cos(startAngle), sin(startAngle));
-  } else {
-    heading = velocity / speed;
+    velocity = vec2(cos(startAngle), sin(startAngle)) * 0.001;
   }
 
-  float directionNoise = hash12(vec2(index + (uSeed * 97.0), uFrame * 0.61803398875));
-  float directionDelta = (directionNoise - 0.5) * 2.0 * uDirectionJitter;
-  float cosDelta = cos(directionDelta);
-  float sinDelta = sin(directionDelta);
-  heading = vec2((heading.x * cosDelta) - (heading.y * sinDelta), (heading.x * sinDelta) + (heading.y * cosDelta));
-
+  // Generate random force direction and magnitude for "gust of wind" behavior
+  float randomAngle = hash12(vec2(index + (uSeed * 97.0), uFrame * 0.61803398875)) * TAU;
+  vec2 randomDirection = vec2(cos(randomAngle), sin(randomAngle));
+  
   float magnitudeNoise = hash12(vec2(index + 19.0 + (uSeed * 131.0), (uFrame + 31.0) * 1.41421356237));
   float accelerationScale = 1.0 + ((magnitudeNoise - 0.5) * 2.0 * uMagnitudeJitter);
   float stepAcceleration = max(0.0, uAcceleration * accelerationScale);
 
-  velocity = velocity + (heading * stepAcceleration);
+  // Apply random force directly to velocity (like a gust hitting a bee)
+  velocity = velocity + (randomDirection * stepAcceleration);
   velocity = velocity * uDamping;
 
   speed = length(velocity);
