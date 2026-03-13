@@ -87,7 +87,17 @@ export class HelloShaderWorldSimulation {
     stateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
     this.stateVariable = stateVariable;
 
+    const capabilities = this.renderer.capabilities as THREE.WebGLRenderer["capabilities"] & {
+      maxVertexTextures: number;
+    };
+    const originalMaxVertexTextures = capabilities.maxVertexTextures;
+    if (originalMaxVertexTextures === 0) {
+      // Compute + readback still work for the contract tests; only the visual point-render path needs vertex textures.
+      capabilities.maxVertexTextures = 1;
+    }
+
     const error = this.gpuCompute.init();
+    capabilities.maxVertexTextures = originalMaxVertexTextures;
     if (error) {
       throw new Error(`Failed to initialize GPU simulation: ${error}`);
     }

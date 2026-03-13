@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   HelloShaderWorldScene,
@@ -33,34 +33,21 @@ export function HelloShaderWorldPage() {
   const { isTestMode, seed } = useMemo(() => resolvePageConfiguration(), []);
   const sessionSeedRef = useRef<string>(seed ?? crypto.randomUUID());
   const resolvedSeed = seed ?? sessionSeedRef.current;
-  const testApiRef = useRef<ShaderWorldTestApi | null>(null);
+  const [testApi, setTestApi] = useState<ShaderWorldTestApi | null>(null);
 
   useEffect(() => {
-    if (!isTestMode) {
+    if (!isTestMode || !testApi) {
       return;
     }
 
     window.__GET_SHADER_CONTRACT_TEXT__ = async (frame) => {
-      const api = testApiRef.current;
-      if (!api) {
-        throw new Error("Shader test API is not ready yet.");
-      }
-
-      return api.getShaderContractText(frame);
+      return testApi.getShaderContractText(frame);
     };
 
-    window.__GET_SHADER_FRAME__ = () => {
-      const api = testApiRef.current;
-      return api ? api.getCurrentFrame() : 0;
-    };
+    window.__GET_SHADER_FRAME__ = () => testApi.getCurrentFrame();
 
     window.__RESET_SHADER_SIM_FOR_TEST__ = async () => {
-      const api = testApiRef.current;
-      if (!api) {
-        throw new Error("Shader test API is not ready yet.");
-      }
-
-      api.resetSimulation();
+      await testApi.resetSimulation();
     };
 
     return () => {
@@ -68,16 +55,14 @@ export function HelloShaderWorldPage() {
       delete window.__GET_SHADER_FRAME__;
       delete window.__RESET_SHADER_SIM_FOR_TEST__;
     };
-  }, [isTestMode]);
+  }, [isTestMode, testApi]);
 
   return (
     <section className="h-full w-full">
       <Canvas camera={{ position: [0, 0, 5], fov: 55 }}>
         <HelloShaderWorldScene
           seed={resolvedSeed}
-          onTestApiReady={(api) => {
-            testApiRef.current = api;
-          }}
+          onTestApiReady={setTestApi}
         />
       </Canvas>
     </section>
