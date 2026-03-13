@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   deleteProjectData,
@@ -65,10 +65,10 @@ export function ParticlePage() {
     };
   }, []);
 
-  const cameraTestApiRef = useRef<CameraPersistenceTestApi | null>(null);
+  const [cameraTestApi, setCameraTestApi] = useState<CameraPersistenceTestApi | null>(null);
 
   useEffect(() => {
-    if (!isTestMode) {
+    if (!isTestMode || !cameraTestApi) {
       return;
     }
 
@@ -82,12 +82,7 @@ export function ParticlePage() {
         );
       }
 
-      const cameraApi = cameraTestApiRef.current;
-      if (!cameraApi) {
-        throw new Error("Camera test API is not ready yet.");
-      }
-
-      await cameraApi.applyCameraActionForTest(action);
+      await cameraTestApi.applyCameraActionForTest(action);
     };
     window.__DELETE_PROJECT_DATA__ = async (requestedProjectId) => {
       await deleteProjectData(requestedProjectId ?? projectId);
@@ -98,16 +93,14 @@ export function ParticlePage() {
       delete window.__APPLY_CAMERA_ACTION_FOR_TEST__;
       delete window.__DELETE_PROJECT_DATA__;
     };
-  }, [isTestMode, projectId]);
+  }, [cameraTestApi, isTestMode, projectId]);
 
   return (
     <section className="h-full w-full">
       <Canvas camera={{ position: [4, 4, 6], fov: 55 }}>
         <ParticleScene
           projectId={projectId}
-          onCameraTestApiReady={(api) => {
-            cameraTestApiRef.current = api;
-          }}
+          onCameraTestApiReady={setCameraTestApi}
         />
       </Canvas>
     </section>

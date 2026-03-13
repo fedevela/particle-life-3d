@@ -144,6 +144,7 @@ export function CameraPersistenceControls({
 }: CameraPersistenceControlsProps) {
   /** Hold the Drei OrbitControls instance reference. */
   const controlsRef = useRef<any>(null);
+  const [areControlsReady, setAreControlsReady] = useState(false);
   /** Access the active Three.js camera from the current canvas context. */
   const { camera } = useThree();
   /** Hold the pending idle timer handle for camera persistence. */
@@ -278,8 +279,13 @@ export function CameraPersistenceControls({
     [camera, movementParams, projectId],
   );
 
+  const setControlsInstance = useCallback((controls: any) => {
+    controlsRef.current = controls;
+    setAreControlsReady(Boolean(controls));
+  }, []);
+
   useEffect(() => {
-    if (!onTestApiReady) {
+    if (!onTestApiReady || !areControlsReady) {
       return;
     }
 
@@ -287,7 +293,7 @@ export function CameraPersistenceControls({
     return () => {
       onTestApiReady(null);
     };
-  }, [applyCameraActionForTest, onTestApiReady]);
+  }, [applyCameraActionForTest, areControlsReady, onTestApiReady]);
 
-  return <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08} onEnd={onEnd} />;
+  return <OrbitControls ref={setControlsInstance} enableDamping dampingFactor={0.08} onEnd={onEnd} />;
 }

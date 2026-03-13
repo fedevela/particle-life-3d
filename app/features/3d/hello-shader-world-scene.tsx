@@ -56,6 +56,7 @@ function createActiveAttribute() {
 
 export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorldSceneProps) {
   const { gl } = useThree();
+  const canRenderSimulation = gl.capabilities.maxVertexTextures > 0;
   const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
   const helloShaderWorldActionQueue = useUiStore((state) => state.helloShaderWorldActionQueue);
   const dequeueHelloShaderWorldAction = useUiStore((state) => state.dequeueHelloShaderWorldAction);
@@ -113,7 +114,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
   }, [movementParams]);
 
   useEffect(() => {
-    if (!onTestApiReady) {
+    if (!onTestApiReady || !isSimulationReady) {
       return;
     }
 
@@ -144,7 +145,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
     return () => {
       onTestApiReady(null);
     };
-  }, [activeAttribute, onTestApiReady, uniforms]);
+  }, [activeAttribute, isSimulationReady, onTestApiReady, uniforms]);
 
   useEffect(() => {
     const simulation = simulationRef.current;
@@ -188,14 +189,16 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
   return (
     <>
       <gridHelper args={[12, 12, "#d97706", "#1f2937"]} />
-      <points>
-        <bufferGeometry>
-          <primitive attach="attributes-position" object={positionAttribute} />
-          <primitive attach="attributes-aReference" object={referenceAttribute} />
-          <primitive attach="attributes-aActive" object={activeAttribute} />
-        </bufferGeometry>
-        <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} />
-      </points>
+      {canRenderSimulation ? (
+        <points>
+          <bufferGeometry>
+            <primitive attach="attributes-position" object={positionAttribute} />
+            <primitive attach="attributes-aReference" object={referenceAttribute} />
+            <primitive attach="attributes-aActive" object={activeAttribute} />
+          </bufferGeometry>
+          <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} />
+        </points>
+      ) : null}
       <OrbitControls />
     </>
   );

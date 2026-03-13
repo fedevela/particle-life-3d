@@ -27,7 +27,7 @@ async function waitForTestApis(page: Page) {
         hasGetFrame: typeof window.__GET_SHADER_FRAME__ === "function",
         hasReset: typeof window.__RESET_SHADER_SIM_FOR_TEST__ === "function",
       }));
-    }, { timeout: 20000 })
+    })
     .toEqual({ hasGetContract: true, hasGetFrame: true, hasReset: true });
 }
 
@@ -49,7 +49,6 @@ async function resetSimulation(page: Page) {
           return false;
         }
       },
-      { timeout: 20000 },
     )
     .toBe(true);
 }
@@ -67,13 +66,20 @@ async function getShaderContractText(page: Page, frame: number) {
 test.describe.serial("hello-shader-world GPU milestone contract", () => {
   let context: BrowserContext | null = null;
   let page: Page | null = null;
+  const pageErrors: string[] = [];
 
   test.beforeAll(async ({ browser }) => {
     context = await browser.newContext();
     page = await context.newPage();
+    page.on("pageerror", (error) => {
+      pageErrors.push(error.message);
+    });
 
     const setupPage = page;
     await setupPage.goto("/hello-shader-world?testMode=true&seed=shader-milestone");
+    if (pageErrors.length > 0) {
+      throw new Error(`Shader page runtime error: ${pageErrors[0]}`);
+    }
     await waitForTestApis(setupPage);
     await resetSimulation(setupPage);
   });
@@ -97,7 +103,6 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
               return null;
             }
           },
-          { timeout: 20000 },
         )
         .toBe(expectedFixture);
     });
