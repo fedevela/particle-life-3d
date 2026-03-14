@@ -6,21 +6,21 @@ export type ShaderStateSnapshot = {
 };
 
 /** Normalize one numeric value into stable two-decimal contract text. */
-function formatTwoDecimals(value: number) {
+function formatMetricWithTwoDecimals(value: number) {
   const formatted = value.toFixed(2);
   return formatted === "-0.00" ? "0.00" : formatted;
 }
 
-function toStableSixDecimals(value: number) {
+function formatChecksumScalarWithSixDecimals(value: number) {
   const formatted = value.toFixed(6);
   return formatted === "-0.000000" ? "0.000000" : formatted;
 }
 
-function toHex16(value: bigint) {
+function toFixedWidthHex16(value: bigint) {
   return value.toString(16).padStart(16, "0");
 }
 
-function updateFvn1a64(hash: bigint, input: string) {
+function updateFvn1a64Checksum(hash: bigint, input: string) {
   const prime = 0x100000001b3n;
   const mask = 0xffffffffffffffffn;
   let nextHash = hash;
@@ -34,7 +34,7 @@ function updateFvn1a64(hash: bigint, input: string) {
 }
 
 /** Read one vec4 state tuple from the flat readback buffer. */
-function readStateTuple(values: Float32Array, index: number) {
+function readParticleStateTuple(values: Float32Array, index: number) {
   const offset = index * 4;
   return {
     x: values[offset],
@@ -68,7 +68,7 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
   let checksumB = 0x84222325cbf29cen;
 
   for (let index = 0; index < particleCount; index += 1) {
-    const next = readStateTuple(snapshot.values, index);
+    const next = readParticleStateTuple(snapshot.values, index);
     const radius = Math.hypot(next.x, next.y);
     const speed = Math.hypot(next.vx, next.vy);
 
@@ -80,37 +80,37 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
     maxRadius = Math.max(maxRadius, radius);
     const rowA = [
       index,
-      toStableSixDecimals(next.x),
-      toStableSixDecimals(next.y),
-      toStableSixDecimals(next.vx),
-      toStableSixDecimals(next.vy),
+      formatChecksumScalarWithSixDecimals(next.x),
+      formatChecksumScalarWithSixDecimals(next.y),
+      formatChecksumScalarWithSixDecimals(next.vx),
+      formatChecksumScalarWithSixDecimals(next.vy),
     ].join("|");
     const rowB = [
       index,
-      toStableSixDecimals(next.vy),
-      toStableSixDecimals(next.vx),
-      toStableSixDecimals(next.y),
-      toStableSixDecimals(next.x),
+      formatChecksumScalarWithSixDecimals(next.vy),
+      formatChecksumScalarWithSixDecimals(next.vx),
+      formatChecksumScalarWithSixDecimals(next.y),
+      formatChecksumScalarWithSixDecimals(next.x),
     ].join("|");
 
-    checksumA = updateFvn1a64(checksumA, rowA);
-    checksumB = updateFvn1a64(checksumB, rowB);
+    checksumA = updateFvn1a64Checksum(checksumA, rowA);
+    checksumB = updateFvn1a64Checksum(checksumB, rowB);
   }
 
-  const checksum = `${toHex16(checksumA)}${toHex16(checksumB)}`;
+  const checksum = `${toFixedWidthHex16(checksumA)}${toFixedWidthHex16(checksumB)}`;
 
-  const sampleIndexes = [0, Math.floor(particleCount / 2), particleCount - 1];
-  const sampleLines = sampleIndexes.map((sampleIndex, orderIndex) => {
-    const sample = readStateTuple(snapshot.values, sampleIndex);
+  const sampleParticleIndexes = [0, Math.floor(particleCount / 2), particleCount - 1];
+  const sampleLines = sampleParticleIndexes.map((sampleIndex, orderIndex) => {
+    const sample = readParticleStateTuple(snapshot.values, sampleIndex);
     return [
       `sample_${orderIndex}=`,
-      formatTwoDecimals(sample.x),
+      formatMetricWithTwoDecimals(sample.x),
       ",",
-      formatTwoDecimals(sample.y),
+      formatMetricWithTwoDecimals(sample.y),
       ",",
-      formatTwoDecimals(sample.vx),
+      formatMetricWithTwoDecimals(sample.vx),
       ",",
-      formatTwoDecimals(sample.vy),
+      formatMetricWithTwoDecimals(sample.vy),
     ].join("");
   });
 
@@ -119,12 +119,12 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
     `frame=${snapshot.frame}`,
     `texture_size=${snapshot.textureSize}`,
     `particle_count=${particleCount}`,
-    `avg_x=${formatTwoDecimals(sumX / particleCount)}`,
-    `avg_y=${formatTwoDecimals(sumY / particleCount)}`,
-    `avg_vx=${formatTwoDecimals(sumVx / particleCount)}`,
-    `avg_vy=${formatTwoDecimals(sumVy / particleCount)}`,
-    `avg_speed=${formatTwoDecimals(sumSpeed / particleCount)}`,
-    `max_radius=${formatTwoDecimals(maxRadius)}`,
+    `avg_x=${formatMetricWithTwoDecimals(sumX / particleCount)}`,
+    `avg_y=${formatMetricWithTwoDecimals(sumY / particleCount)}`,
+    `avg_vx=${formatMetricWithTwoDecimals(sumVx / particleCount)}`,
+    `avg_vy=${formatMetricWithTwoDecimals(sumVy / particleCount)}`,
+    `avg_speed=${formatMetricWithTwoDecimals(sumSpeed / particleCount)}`,
+    `max_radius=${formatMetricWithTwoDecimals(maxRadius)}`,
     `checksum=${checksum}`,
     ...sampleLines,
   ];

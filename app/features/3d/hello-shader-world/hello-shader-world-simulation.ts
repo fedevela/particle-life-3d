@@ -37,55 +37,59 @@ export class HelloShaderWorldSimulation {
   private readonly renderer: THREE.WebGLRenderer;
 
   /** Hold the GPU compute helper and state variable once initialized. */
-  private readonly gpuCompute: GPUComputationRenderer;
-  private readonly stateVariable: Variable;
+  private readonly gpuComputationRenderer: GPUComputationRenderer;
+  private readonly simulationStateVariable: Variable;
 
   /** Keep current simulation frame + elapsed time progression. */
-  private frame = 0;
-  private elapsedTimeSeconds = 0;
-  private readonly seedText: string;
-  private readonly seedValue: number;
-  private rngState: number;
+  private currentSimulationFrame = 0;
+  private elapsedSimulationSeconds = 0;
+  private readonly deterministicSeedText: string;
+  private readonly shaderSeedUniformValue: number;
+  private deterministicRngState: number;
   private movementParams: HelloShaderWorldMovementParams = DEFAULT_HELLO_SHADER_WORLD_MOVEMENT_PARAMS;
 
   /** Store published contracts by exact milestone frame number. */
-  private readonly milestoneContracts = new Map<number, string>();
+  private readonly milestoneContractByFrame = new Map<number, string>();
 
   /** Reuse one readback buffer to avoid allocations during milestone snapshots. */
-  private readonly readbackBuffer = new Float32Array(SHADER_PARTICLE_CAPACITY * 4);
-  private readonly stagingTexture: THREE.DataTexture;
+  private readonly gpuStateReadbackBuffer = new Float32Array(SHADER_PARTICLE_CAPACITY * 4);
+  private readonly gpuStateStagingTexture: THREE.DataTexture;
 
   /** Keep active particle indexes to support deterministic add/remove operations. */
-  private readonly activeParticleIndexes: number[] = [];
-  private readonly activeIndexByParticle = new Int32Array(SHADER_PARTICLE_CAPACITY).fill(-1);
+  private readonly activeParticleIds: number[] = [];
+  private readonly activeParticleLookupById = new Int32Array(SHADER_PARTICLE_CAPACITY).fill(-1);
 
   /** Initialize GPU simulation resources and seed frame 0 state. */
   constructor(renderer: THREE.WebGLRenderer, seed: string) {
     this.renderer = renderer;
-    this.seedText = seed;
-    this.seedValue = this.hashSeed(seed);
-    this.rngState = this.hashSeedUint(seed);
-    this.gpuCompute = new GPUComputationRenderer(SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.renderer);
+    this.deterministicSeedText = seed;
+    this.shaderSeedUniformValue = this.deriveNormalizedSeedUniform(seed);
+    this.deterministicRngState = this.deriveSeedUint32(seed);
+    this.gpuComputationRenderer = new GPUComputationRenderer(SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.renderer);
 
-    const initialTexture = this.gpuCompute.createTexture();
-    this.stagingTexture = this.gpuCompute.createTexture();
-    const data = initialTexture.image.data;
-    if (!(data instanceof Float32Array)) {
+    const initialStateTexture = this.gpuComputationRenderer.createTexture();
+    this.gpuStateStagingTexture = this.gpuComputationRenderer.createTexture();
+    const initialTextureData = initialStateTexture.image.data;
+    if (!(initialTextureData instanceof Float32Array)) {
       throw new Error("Expected GPU initial texture data to be a Float32Array.");
     }
 
-    this.writeInitialState(data);
+    this.writeInitialSimulationState(initialTextureData);
 
-    const stateVariable = this.gpuCompute.addVariable("textureState", computeShader, initialTexture);
-    this.gpuCompute.setVariableDependencies(stateVariable, [stateVariable]);
-    stateVariable.material.uniforms.uFrame = { value: 0 };
-    stateVariable.material.uniforms.uSeed = { value: this.seedValue };
-    stateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
-    stateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
-    stateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
-    stateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
-    stateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
-    this.stateVariable = stateVariable;
+    const simulationStateVariable = this.gpuComputationRenderer.addVariable(
+      "textureState",
+      computeShader,
+      initialStateTexture,
+    );
+    this.gpuComputationRenderer.setVariableDependencies(simulationStateVariable, [simulationStateVariable]);
+    simulationStateVariable.material.uniforms.uFrame = { value: 0 };
+    simulationStateVariable.material.uniforms.uSeed = { value: this.shaderSeedUniformValue };
+    simulationStateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
+    simulationStateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
+    simulationStateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
+    simulationStateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
+    simulationStateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
+    this.simulationStateVariable = simulationStateVariable;
 
     const capabilities = this.renderer.capabilities as THREE.WebGLRenderer["capabilities"] & {
       maxVertexTextures: number;
@@ -96,30 +100,30 @@ export class HelloShaderWorldSimulation {
       capabilities.maxVertexTextures = 1;
     }
 
-    const error = this.gpuCompute.init();
+    const error = this.gpuComputationRenderer.init();
     capabilities.maxVertexTextures = originalMaxVertexTextures;
     if (error) {
       throw new Error(`Failed to initialize GPU simulation: ${error}`);
     }
 
-    this.computeFrame(0);
-    this.captureMilestoneIfNeeded(0);
+    this.computeSimulationFrame(0);
+    this.captureContractMilestoneIfConfigured(0);
     logger.info("Initialized GPU simulation and captured frame 0 contract.");
   }
 
   /** Release GPU computation resources. */
   public dispose() {
-    this.gpuCompute.dispose();
+    this.gpuComputationRenderer.dispose();
   }
 
   /** Return current GPU texture used by particle render shaders. */
   public getStateTexture() {
-    return this.gpuCompute.getCurrentRenderTarget(this.stateVariable).texture;
+    return this.gpuComputationRenderer.getCurrentRenderTarget(this.simulationStateVariable).texture;
   }
 
   /** Return current simulation frame number. */
   public getCurrentFrame() {
-    return this.frame;
+    return this.currentSimulationFrame;
   }
 
   public setMovementParams(nextParams: HelloShaderWorldMovementParams) {
@@ -128,92 +132,92 @@ export class HelloShaderWorldSimulation {
 
   /** Reset simulation progression and clear all previously captured milestones. */
   public reset() {
-    this.frame = 0;
-    this.elapsedTimeSeconds = 0;
-    this.rngState = this.hashSeedUint(this.seedText);
-    this.milestoneContracts.clear();
-    this.resetGpuState();
-    this.computeFrame(0);
-    this.captureMilestoneIfNeeded(0);
+    this.currentSimulationFrame = 0;
+    this.elapsedSimulationSeconds = 0;
+    this.deterministicRngState = this.deriveSeedUint32(this.deterministicSeedText);
+    this.milestoneContractByFrame.clear();
+    this.resetGpuStateTexture();
+    this.computeSimulationFrame(0);
+    this.captureContractMilestoneIfConfigured(0);
     logger.info("Reset GPU simulation to frame 0.");
   }
 
   /** Return currently active ball count. */
   public getActiveParticleCount() {
-    return this.activeParticleIndexes.length;
+    return this.activeParticleIds.length;
   }
 
   /** Activate up to `amount` inactive particles at world center. */
   public addParticles(amount: number) {
-    const requestedAmount = this.normalizeRequestedAmount(amount);
-    if (requestedAmount === 0) {
+    const normalizedParticleDelta = this.normalizeParticleDeltaRequest(amount);
+    if (normalizedParticleDelta === 0) {
       return [] as number[];
     }
 
-    this.readCurrentStateBuffer();
-    const data = this.readbackBuffer;
-    const addedIndexes: number[] = [];
+    this.readCurrentGpuStateIntoBuffer();
+    const readbackData = this.gpuStateReadbackBuffer;
+    const addedParticleIds: number[] = [];
 
     let added = 0;
-    for (let index = 0; index < SHADER_PARTICLE_CAPACITY && added < requestedAmount; index += 1) {
-      if (this.activeIndexByParticle[index] !== -1) {
+    for (let particleId = 0; particleId < SHADER_PARTICLE_CAPACITY && added < normalizedParticleDelta; particleId += 1) {
+      if (this.activeParticleLookupById[particleId] !== -1) {
         continue;
       }
 
-      const offset = index * 4;
-      const spawnAngle = this.nextRandom() * TAU;
-      const spawnRadius = this.nextRandom() * 0.04;
-      const spawnSpeed = this.movementParams.maxSpeed * (0.35 + (this.nextRandom() * 0.35));
-      data[offset] = Math.cos(spawnAngle) * spawnRadius;
-      data[offset + 1] = Math.sin(spawnAngle) * spawnRadius;
-      data[offset + 2] = Math.cos(spawnAngle) * spawnSpeed;
-      data[offset + 3] = Math.sin(spawnAngle) * spawnSpeed;
-      this.markParticleActive(index);
-      addedIndexes.push(index);
+      const particleOffset = particleId * 4;
+      const spawnAngle = this.nextDeterministicRandom() * TAU;
+      const spawnRadius = this.nextDeterministicRandom() * 0.04;
+      const spawnSpeed = this.movementParams.maxSpeed * (0.35 + (this.nextDeterministicRandom() * 0.35));
+      readbackData[particleOffset] = Math.cos(spawnAngle) * spawnRadius;
+      readbackData[particleOffset + 1] = Math.sin(spawnAngle) * spawnRadius;
+      readbackData[particleOffset + 2] = Math.cos(spawnAngle) * spawnSpeed;
+      readbackData[particleOffset + 3] = Math.sin(spawnAngle) * spawnSpeed;
+      this.markParticleAsActive(particleId);
+      addedParticleIds.push(particleId);
       added += 1;
     }
 
     if (added > 0) {
-      this.writeStateToGpu(data);
+      this.writeStateBufferToBothRenderTargets(readbackData);
     }
 
-    return addedIndexes;
+    return addedParticleIds;
   }
 
   /** Remove up to `amount` currently active particles using deterministic random selection. */
   public removeParticles(amount: number) {
-    const requestedAmount = this.normalizeRequestedAmount(amount);
-    if (requestedAmount === 0 || this.activeParticleIndexes.length === 0) {
+    const normalizedParticleDelta = this.normalizeParticleDeltaRequest(amount);
+    if (normalizedParticleDelta === 0 || this.activeParticleIds.length === 0) {
       return [] as number[];
     }
 
-    const removedIndexes: number[] = [];
+    const removedParticleIds: number[] = [];
 
     let removed = 0;
-    for (; removed < requestedAmount && this.activeParticleIndexes.length > 0; removed += 1) {
-      const randomIndex = Math.floor(this.nextRandom() * this.activeParticleIndexes.length);
-      const particleIndex = this.activeParticleIndexes[randomIndex];
-      this.markParticleInactive(particleIndex);
-      removedIndexes.push(particleIndex);
+    for (; removed < normalizedParticleDelta && this.activeParticleIds.length > 0; removed += 1) {
+      const randomActiveIndex = Math.floor(this.nextDeterministicRandom() * this.activeParticleIds.length);
+      const particleId = this.activeParticleIds[randomActiveIndex];
+      this.markParticleAsInactive(particleId);
+      removedParticleIds.push(particleId);
     }
 
-    return removedIndexes;
+    return removedParticleIds;
   }
 
   /** Advance simulation by one frame and capture milestone report when configured. */
   public step() {
-    const nextFrame = this.frame + 1;
-    this.frame = nextFrame;
-    this.elapsedTimeSeconds += FIXED_TIME_STEP_SECONDS;
+    const nextFrame = this.currentSimulationFrame + 1;
+    this.currentSimulationFrame = nextFrame;
+    this.elapsedSimulationSeconds += FIXED_TIME_STEP_SECONDS;
 
-    this.computeFrame(nextFrame);
-    return this.captureMilestoneIfNeeded(nextFrame);
+    this.computeSimulationFrame(nextFrame);
+    return this.captureContractMilestoneIfConfigured(nextFrame);
   }
 
   /** Return contract text for one milestone frame or latest published milestone. */
   public getShaderContractText(frame?: number) {
     if (typeof frame === "number") {
-      const exact = this.milestoneContracts.get(frame);
+      const exact = this.milestoneContractByFrame.get(frame);
       if (exact) {
         return exact;
       }
@@ -221,7 +225,7 @@ export class HelloShaderWorldSimulation {
       throw new Error(`Shader contract for frame ${frame} is not available yet.`);
     }
 
-    const latestFrame = Array.from(this.milestoneContracts.keys())
+    const latestFrame = Array.from(this.milestoneContractByFrame.keys())
       .sort((left, right) => left - right)
       .at(-1);
 
@@ -229,22 +233,22 @@ export class HelloShaderWorldSimulation {
       throw new Error("No shader contract is available yet.");
     }
 
-    return this.milestoneContracts.get(latestFrame) as string;
+    return this.milestoneContractByFrame.get(latestFrame) as string;
   }
 
   /** Execute one GPU computation pass configured for the provided frame number. */
-  private computeFrame(frame: number) {
-    this.stateVariable.material.uniforms.uFrame.value = frame;
-    this.stateVariable.material.uniforms.uSeed.value = this.seedValue;
-    this.stateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
-    this.stateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
-    this.stateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
-    this.stateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
-    this.stateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
-    this.gpuCompute.compute();
+  private computeSimulationFrame(frame: number) {
+    this.simulationStateVariable.material.uniforms.uFrame.value = frame;
+    this.simulationStateVariable.material.uniforms.uSeed.value = this.shaderSeedUniformValue;
+    this.simulationStateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
+    this.simulationStateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
+    this.simulationStateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
+    this.simulationStateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
+    this.simulationStateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
+    this.gpuComputationRenderer.compute();
   }
 
-  private hashSeed(seed: string) {
+  private deriveNormalizedSeedUniform(seed: string) {
     let hash = 2166136261;
     for (let index = 0; index < seed.length; index += 1) {
       hash ^= seed.charCodeAt(index);
@@ -254,7 +258,7 @@ export class HelloShaderWorldSimulation {
     return ((hash >>> 0) % 1000000) / 1000000;
   }
 
-  private hashSeedUint(seed: string) {
+  private deriveSeedUint32(seed: string) {
     let hash = 2166136261;
     for (let index = 0; index < seed.length; index += 1) {
       hash ^= seed.charCodeAt(index);
@@ -264,14 +268,14 @@ export class HelloShaderWorldSimulation {
     return hash >>> 0;
   }
 
-  private nextRandom() {
-    this.rngState ^= this.rngState << 13;
-    this.rngState ^= this.rngState >>> 17;
-    this.rngState ^= this.rngState << 5;
-    return (this.rngState >>> 0) / 4294967296;
+  private nextDeterministicRandom() {
+    this.deterministicRngState ^= this.deterministicRngState << 13;
+    this.deterministicRngState ^= this.deterministicRngState >>> 17;
+    this.deterministicRngState ^= this.deterministicRngState << 5;
+    return (this.deterministicRngState >>> 0) / 4294967296;
   }
 
-  private normalizeRequestedAmount(amount: number) {
+  private normalizeParticleDeltaRequest(amount: number) {
     if (!Number.isFinite(amount)) {
       return 0;
     }
@@ -279,42 +283,49 @@ export class HelloShaderWorldSimulation {
     return Math.max(0, Math.min(Math.floor(amount), SHADER_PARTICLE_CAPACITY));
   }
 
-  private writeInitialState(data: Float32Array) {
+  private writeInitialSimulationState(data: Float32Array) {
     data.fill(0);
-    this.activeParticleIndexes.length = 0;
-    this.activeIndexByParticle.fill(-1);
-    this.markParticleActive(0);
+    this.activeParticleIds.length = 0;
+    this.activeParticleLookupById.fill(-1);
+    this.markParticleAsActive(0);
   }
 
-  private resetGpuState() {
-    const data = this.stagingTexture.image.data;
-    if (!(data instanceof Float32Array)) {
+  private resetGpuStateTexture() {
+    const stagingTextureData = this.gpuStateStagingTexture.image.data;
+    if (!(stagingTextureData instanceof Float32Array)) {
       throw new Error("Expected staging texture data to be a Float32Array.");
     }
 
-    this.writeInitialState(data);
-    this.writeStateToGpu(data);
+    this.writeInitialSimulationState(stagingTextureData);
+    this.writeStateBufferToBothRenderTargets(stagingTextureData);
   }
 
-  private readCurrentStateBuffer() {
-    const target = this.gpuCompute.getCurrentRenderTarget(this.stateVariable);
-    this.renderer.readRenderTargetPixels(target, 0, 0, SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.readbackBuffer);
+  private readCurrentGpuStateIntoBuffer() {
+    const currentRenderTarget = this.gpuComputationRenderer.getCurrentRenderTarget(this.simulationStateVariable);
+    this.renderer.readRenderTargetPixels(
+      currentRenderTarget,
+      0,
+      0,
+      SHADER_TEXTURE_SIZE,
+      SHADER_TEXTURE_SIZE,
+      this.gpuStateReadbackBuffer,
+    );
   }
 
-  private writeStateToGpu(data: Float32Array) {
-    const stagingData = this.stagingTexture.image.data;
-    if (!(stagingData instanceof Float32Array)) {
+  private writeStateBufferToBothRenderTargets(data: Float32Array) {
+    const stagingTextureData = this.gpuStateStagingTexture.image.data;
+    if (!(stagingTextureData instanceof Float32Array)) {
       throw new Error("Expected staging texture data to be a Float32Array.");
     }
 
-    stagingData.set(data);
-    const renderTargets = this.getStateRenderTargets();
-    this.gpuCompute.renderTexture(this.stagingTexture, renderTargets[0]);
-    this.gpuCompute.renderTexture(this.stagingTexture, renderTargets[1]);
+    stagingTextureData.set(data);
+    const pingPongRenderTargets = this.getPingPongRenderTargets();
+    this.gpuComputationRenderer.renderTexture(this.gpuStateStagingTexture, pingPongRenderTargets[0]);
+    this.gpuComputationRenderer.renderTexture(this.gpuStateStagingTexture, pingPongRenderTargets[1]);
   }
 
-  private getStateRenderTargets() {
-    const stateVariableWithTargets = this.stateVariable as Variable & {
+  private getPingPongRenderTargets() {
+    const stateVariableWithTargets = this.simulationStateVariable as Variable & {
       renderTargets?: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
     };
     if (!stateVariableWithTargets.renderTargets) {
@@ -324,52 +335,52 @@ export class HelloShaderWorldSimulation {
     return stateVariableWithTargets.renderTargets;
   }
 
-  private markParticleActive(index: number) {
-    if (this.activeIndexByParticle[index] !== -1) {
+  private markParticleAsActive(particleId: number) {
+    if (this.activeParticleLookupById[particleId] !== -1) {
       return;
     }
 
-    this.activeIndexByParticle[index] = this.activeParticleIndexes.length;
-    this.activeParticleIndexes.push(index);
+    this.activeParticleLookupById[particleId] = this.activeParticleIds.length;
+    this.activeParticleIds.push(particleId);
   }
 
-  private markParticleInactive(index: number) {
-    const activeIndex = this.activeIndexByParticle[index];
+  private markParticleAsInactive(particleId: number) {
+    const activeIndex = this.activeParticleLookupById[particleId];
     if (activeIndex === -1) {
       return;
     }
 
-    const lastParticleIndex = this.activeParticleIndexes[this.activeParticleIndexes.length - 1];
-    this.activeParticleIndexes[activeIndex] = lastParticleIndex;
-    this.activeIndexByParticle[lastParticleIndex] = activeIndex;
-    this.activeParticleIndexes.pop();
-    this.activeIndexByParticle[index] = -1;
+    const lastActiveParticleId = this.activeParticleIds[this.activeParticleIds.length - 1];
+    this.activeParticleIds[activeIndex] = lastActiveParticleId;
+    this.activeParticleLookupById[lastActiveParticleId] = activeIndex;
+    this.activeParticleIds.pop();
+    this.activeParticleLookupById[particleId] = -1;
   }
 
   /** Capture and store milestone text when this frame is configured as a report point. */
-  private captureMilestoneIfNeeded(frame: number): ShaderMilestone | null {
+  private captureContractMilestoneIfConfigured(frame: number): ShaderMilestone | null {
     if (!SHADER_MILESTONE_FRAMES.includes(frame as (typeof SHADER_MILESTONE_FRAMES)[number])) {
       return null;
     }
 
-    const target = this.gpuCompute.getCurrentRenderTarget(this.stateVariable);
+    const currentRenderTarget = this.gpuComputationRenderer.getCurrentRenderTarget(this.simulationStateVariable);
 
     this.renderer.readRenderTargetPixels(
-      target,
+      currentRenderTarget,
       0,
       0,
       SHADER_TEXTURE_SIZE,
       SHADER_TEXTURE_SIZE,
-      this.readbackBuffer,
+      this.gpuStateReadbackBuffer,
     );
 
     const contractText = getShaderContractText({
       frame,
       textureSize: SHADER_TEXTURE_SIZE,
-      values: new Float32Array(this.readbackBuffer),
+      values: new Float32Array(this.gpuStateReadbackBuffer),
     });
 
-    this.milestoneContracts.set(frame, contractText);
+    this.milestoneContractByFrame.set(frame, contractText);
     logger.info("Captured shader milestone contract.", { frame });
 
     return {
