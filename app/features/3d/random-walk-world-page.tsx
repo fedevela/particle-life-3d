@@ -1,21 +1,47 @@
 import { Canvas } from "@react-three/fiber";
-import { useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
-import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world-physics-seam";
+import { RandomWalkWorldSimulation } from "~/features/3d/random-walk-world-simulation";
 import { useUiStore } from "~/state/ui-store";
 import type { RandomWalkWorldParams } from "~/types/random-walk-world";
 
 /** Issue #32 architecture placement mapping: CH-001, CH-003. */
 const ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-001", "CH-003"] as const;
 
+declare global {
+  interface Window {
+    __GET_RANDOM_WALK_FRAME__?: () => number;
+    __GET_RANDOM_WALK_CONTRACT_TEXT__?: (timeMs?: number) => string;
+    __RESET_RANDOM_WALK_SIM_FOR_TEST__?: () => void;
+  }
+}
+
+function resolveRandomWalkPageConfiguration() {
+  if (typeof window === "undefined") {
+    return {
+      isTestMode: false,
+      seed: null as string | null,
+    };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return {
+    isTestMode: searchParams.get("testMode") === "true",
+    seed: searchParams.get("seed"),
+  };
+}
+
 /**
  * Place the random-walk runtime surface in the 3D feature layer.
  */
 export function RandomWalkWorldPage() {
   const params = useUiStore((state) => state.randomWalkWorldParams);
+  const { isTestMode, seed } = useMemo(() => resolveRandomWalkPageConfiguration(), []);
+  const sessionSeedRef = useRef(seed ?? crypto.randomUUID());
+  const resolvedSeed = seed ?? sessionSeedRef.current;
 
   void ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS;
 
@@ -25,63 +51,51 @@ export function RandomWalkWorldPage() {
         <color attach="background" args={["#020617"]} />
         <ambientLight intensity={0.75} />
         <gridHelper args={[18, 18, "#164e63", "#0f172a"]} />
-        <RandomWalkDotCloud params={params} />
+        <RandomWalkDotCloud params={params} seed={resolvedSeed} isTestMode={isTestMode} />
         <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
       </Canvas>
     </section>
   );
 }
 
-function createInitialState(params: RandomWalkWorldParams) {
-  const positions = new Float32Array(params.dotCount * 3);
-  const velocities = new Float32Array(params.dotCount * 3);
-  const spawnExtent = params.boundaryExtent * 0.8;
-
-  for (let index = 0; index < params.dotCount; index += 1) {
-    const offset = index * 3;
-    positions[offset] = (Math.random() * 2 - 1) * spawnExtent;
-    positions[offset + 1] = (Math.random() * 2 - 1) * spawnExtent;
-    positions[offset + 2] = (Math.random() * 2 - 1) * spawnExtent;
-
-    velocities[offset] = (Math.random() * 2 - 1) * params.stepScale;
-    velocities[offset + 1] = (Math.random() * 2 - 1) * params.stepScale;
-    velocities[offset + 2] = (Math.random() * 2 - 1) * params.stepScale;
-  }
-
-  return { positions, velocities };
-}
-
 type RandomWalkDotCloudProps = {
   params: RandomWalkWorldParams;
+  seed: string;
+  isTestMode: boolean;
 };
 
-function RandomWalkDotCloud({ params }: RandomWalkDotCloudProps) {
-  const physicsPort = useMemo(() => createRandomWalkToroidalPhysicsPort(), []);
-  const simulationHandleRef = useRef<ReturnType<typeof physicsPort.initializeSimulation> | null>(null);
+function RandomWalkDotCloud({ params, seed, isTestMode }: RandomWalkDotCloudProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
-  const velocityRef = useRef<Float32Array>(new Float32Array(0));
-  const state = useMemo(() => createInitialState(params), [params]);
-
-  const boundary = useMemo(
-    () => ({
-      min: [-params.boundaryExtent, -params.boundaryExtent, -params.boundaryExtent] as const,
-      max: [params.boundaryExtent, params.boundaryExtent, params.boundaryExtent] as const,
-    }),
-    [params.boundaryExtent],
+  const simulation = useMemo(
+    () => new RandomWalkWorldSimulation(params, seed, isTestMode),
+    [params, seed, isTestMode],
   );
 
   useEffect(() => {
-    velocityRef.current = state.velocities;
-    simulationHandleRef.current?.dispose();
-    simulationHandleRef.current = physicsPort.initializeSimulation(params);
+    if (!isTestMode) {
+      return;
+    }
+
+    window.__GET_RANDOM_WALK_FRAME__ = () => simulation.getFrame();
+    window.__GET_RANDOM_WALK_CONTRACT_TEXT__ = (timeMs) => {
+      if (typeof timeMs === "number") {
+        return simulation.getContractTextAtTimeMs(timeMs);
+      }
+
+      return simulation.getContractTextAtFrame(simulation.getFrame());
+    };
+    window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ = () => {
+      simulation.reset();
+    };
 
     return () => {
-      simulationHandleRef.current?.dispose();
-      simulationHandleRef.current = null;
+      delete window.__GET_RANDOM_WALK_FRAME__;
+      delete window.__GET_RANDOM_WALK_CONTRACT_TEXT__;
+      delete window.__RESET_RANDOM_WALK_SIM_FOR_TEST__;
     };
-  }, [params, physicsPort, state.velocities]);
+  }, [isTestMode, simulation]);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     const geometry = geometryRef.current;
     if (!geometry) {
       return;
@@ -92,56 +106,14 @@ function RandomWalkDotCloud({ params }: RandomWalkDotCloudProps) {
       return;
     }
 
-    const positions = positionAttribute.array as Float32Array;
-    const velocities = velocityRef.current;
-    const deltaScale = Math.min(delta * 60, 2);
-
-    for (let index = 0; index < params.dotCount; index += 1) {
-      const offset = index * 3;
-      let vx = velocities[offset];
-      let vy = velocities[offset + 1];
-      let vz = velocities[offset + 2];
-
-      vx += (Math.random() * 2 - 1) * params.stepScale * 0.15;
-      vy += (Math.random() * 2 - 1) * params.stepScale * 0.15;
-      vz += (Math.random() * 2 - 1) * params.stepScale * 0.15;
-
-      const maxSpeed = params.stepScale * 3;
-      const speed = Math.hypot(vx, vy, vz);
-      if (speed > maxSpeed && speed > 0) {
-        const ratio = maxSpeed / speed;
-        vx *= ratio;
-        vy *= ratio;
-        vz *= ratio;
-      }
-
-      const transition = physicsPort.deriveToroidalWrapTransition(
-        {
-          position: [
-            positions[offset] + vx * deltaScale,
-            positions[offset + 1] + vy * deltaScale,
-            positions[offset + 2] + vz * deltaScale,
-          ],
-          velocity: [vx, vy, vz],
-        },
-        boundary,
-      );
-
-      positions[offset] = transition.nextPosition[0];
-      positions[offset + 1] = transition.nextPosition[1];
-      positions[offset + 2] = transition.nextPosition[2];
-      velocities[offset] = transition.preservedVelocity[0];
-      velocities[offset + 1] = transition.preservedVelocity[1];
-      velocities[offset + 2] = transition.preservedVelocity[2];
-    }
-
+    simulation.stepFrame();
     positionAttribute.needsUpdate = true;
   });
 
   return (
     <points frustumCulled={false}>
       <bufferGeometry ref={geometryRef}>
-        <bufferAttribute attach="attributes-position" args={[state.positions, 3]} />
+        <bufferAttribute attach="attributes-position" args={[simulation.getPositions(), 3]} />
       </bufferGeometry>
       <pointsMaterial color="#34d399" size={0.07} sizeAttenuation depthWrite={false} />
     </points>
