@@ -8,7 +8,7 @@ import { CAMERA_ACTIONS, type CameraAction } from "../../app/features/3d/hello-w
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CAMERA_CONTRACT_CASES = CAMERA_ACTIONS.map((action, index) => ({
+const CAMERA_CONTRACT_MILESTONE_CASES = CAMERA_ACTIONS.map((action, index) => ({
   action,
   fixtureName: `hello-world.camera.step-${String(index + 1).padStart(2, "0")}.txt`,
 }));
@@ -17,16 +17,16 @@ function toCameraActionLabel(action: CameraAction) {
   return action.replaceAll("_", " ");
 }
 
-async function readContractFixture(fileName: string) {
+async function readHelloWorldContractFixture(fileName: string) {
   const fixturePath = path.join(__dirname, "contracts", fileName);
   return readFile(fixturePath, "utf8");
 }
 
-function createProjectId() {
+function buildIsolatedContractTestProjectId() {
   return `pw-hello-world-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-async function waitForTestApis(page: Page) {
+async function waitForHelloWorldContractTestGlobals(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => ({
@@ -38,7 +38,7 @@ async function waitForTestApis(page: Page) {
     .toEqual({ hasGet: true, hasApply: true, hasDelete: true });
 }
 
-async function getRawContractText(page: Page, projectId: string) {
+async function fetchHelloWorldDbContractText(page: Page, projectId: string) {
   return page.evaluate(async ({ nextProjectId }: { nextProjectId: string }) => {
     if (typeof window.__GET_DB_CONTRACT_TEXT__ !== "function") {
       throw new Error("window.__GET_DB_CONTRACT_TEXT__ is not available.");
@@ -48,7 +48,7 @@ async function getRawContractText(page: Page, projectId: string) {
   }, { nextProjectId: projectId });
 }
 
-async function applyCameraAction(page: Page, action: CameraAction, projectId: string) {
+async function applyCameraActionContractStep(page: Page, action: CameraAction, projectId: string) {
   await page.evaluate(
     async ({ nextAction, nextProjectId }: { nextAction: CameraAction; nextProjectId: string }) => {
       if (typeof window.__APPLY_CAMERA_ACTION_FOR_TEST__ !== "function") {
@@ -61,7 +61,7 @@ async function applyCameraAction(page: Page, action: CameraAction, projectId: st
   );
 }
 
-async function deleteProjectData(page: Page, projectId: string) {
+async function purgeHelloWorldProjectData(page: Page, projectId: string) {
   await page.evaluate(async ({ nextProjectId }: { nextProjectId: string }) => {
     if (typeof window.__DELETE_PROJECT_DATA__ !== "function") {
       return;
@@ -77,7 +77,7 @@ test.describe.serial("hello-world camera DB contract", () => {
   let projectId: string | null = null;
 
   test.beforeAll(async ({ browser }) => {
-    const setupProjectId = createProjectId();
+    const setupProjectId = buildIsolatedContractTestProjectId();
     projectId = setupProjectId;
     context = await browser.newContext();
     page = await context.newPage();
@@ -85,13 +85,13 @@ test.describe.serial("hello-world camera DB contract", () => {
     const setupPage = page;
 
     await setupPage.goto(`/hello-world?testMode=true&projectId=${setupProjectId}&seed=hello`);
-    await waitForTestApis(setupPage);
+    await waitForHelloWorldContractTestGlobals(setupPage);
 
-    const initialFixture = await readContractFixture("hello-world.initial.txt");
-    await expect.poll(async () => getRawContractText(setupPage, setupProjectId)).toBe(initialFixture);
+    const initialFixture = await readHelloWorldContractFixture("hello-world.initial.txt");
+    await expect.poll(async () => fetchHelloWorldDbContractText(setupPage, setupProjectId)).toBe(initialFixture);
   });
 
-  for (const { action, fixtureName } of CAMERA_CONTRACT_CASES) {
+  for (const { action, fixtureName } of CAMERA_CONTRACT_MILESTONE_CASES) {
     test(`camera action: ${toCameraActionLabel(action)}`, async () => {
       if (!page || !projectId) {
         throw new Error("Expected test page and projectId to be initialized in beforeAll.");
@@ -100,17 +100,17 @@ test.describe.serial("hello-world camera DB contract", () => {
       const testPage = page;
       const testProjectId = projectId;
 
-      await applyCameraAction(testPage, action, testProjectId);
+      await applyCameraActionContractStep(testPage, action, testProjectId);
 
-      const expectedFixture = await readContractFixture(fixtureName);
-      await expect.poll(async () => getRawContractText(testPage, testProjectId)).toBe(expectedFixture);
+      const expectedFixture = await readHelloWorldContractFixture(fixtureName);
+      await expect.poll(async () => fetchHelloWorldDbContractText(testPage, testProjectId)).toBe(expectedFixture);
     });
   }
 
   test.afterAll(async () => {
     if (page && projectId) {
       try {
-        await deleteProjectData(page, projectId);
+        await purgeHelloWorldProjectData(page, projectId);
       } catch {
         // Ignore teardown cleanup errors to keep primary test failure output clear.
       }

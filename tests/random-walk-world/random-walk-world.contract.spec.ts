@@ -11,21 +11,21 @@ const RANDOM_WALK_MILESTONES_MS = [0, 72, 144, 216, 288, 360] as const;
 const FIXTURE_SEED = "random-walk-fixture-seed-v1";
 const SHOULD_UPDATE_CONTRACTS = process.env.UPDATE_RANDOM_WALK_CONTRACTS === "1";
 
-const CASES = RANDOM_WALK_MILESTONES_MS.map((timeMs) => ({
+const RANDOM_WALK_CONTRACT_MILESTONE_CASES = RANDOM_WALK_MILESTONES_MS.map((timeMs) => ({
   timeMs,
   fixtureName: `random-walk-world.ms-${String(timeMs).padStart(3, "0")}.txt`,
 }));
 
-async function readContractFixture(fileName: string) {
+async function readRandomWalkContractFixture(fileName: string) {
   const fixturePath = path.join(__dirname, "contracts", fileName);
   return readFile(fixturePath, "utf8");
 }
 
-function getContractFixturePath(fileName: string) {
+function getRandomWalkContractFixturePath(fileName: string) {
   return path.join(__dirname, "contracts", fileName);
 }
 
-async function waitForTestApis(page: Page) {
+async function waitForRandomWalkContractTestGlobals(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => ({
@@ -37,7 +37,7 @@ async function waitForTestApis(page: Page) {
     .toEqual({ hasGetContract: true, hasGetFrame: true, hasReset: true });
 }
 
-async function resetSimulation(page: Page) {
+async function resetRandomWalkSimulationForMilestones(page: Page) {
   await page.evaluate(async () => {
     if (typeof window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ !== "function") {
       throw new Error("window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ is not available.");
@@ -47,7 +47,7 @@ async function resetSimulation(page: Page) {
   });
 }
 
-async function getRandomWalkContractText(page: Page, timeMs: number) {
+async function fetchRandomWalkContractTextAtTimeMs(page: Page, timeMs: number) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await page.evaluate(async ({ targetTimeMs }: { targetTimeMs: number }) => {
@@ -65,7 +65,7 @@ async function getRandomWalkContractText(page: Page, timeMs: number) {
         throw error;
       }
       if (isApiUnavailable) {
-        await waitForTestApis(page);
+        await waitForRandomWalkContractTestGlobals(page);
       }
       await page.waitForTimeout(100);
     }
@@ -84,19 +84,19 @@ test.describe.serial("random-walk-world deterministic milestones contract", () =
 
     const setupPage = page;
     await setupPage.goto(`/random-walk-world?testMode=true&seed=${FIXTURE_SEED}`);
-    await waitForTestApis(setupPage);
-    await resetSimulation(setupPage);
+    await waitForRandomWalkContractTestGlobals(setupPage);
+    await resetRandomWalkSimulationForMilestones(setupPage);
   });
 
-  for (const { timeMs, fixtureName } of CASES) {
+  for (const { timeMs, fixtureName } of RANDOM_WALK_CONTRACT_MILESTONE_CASES) {
     test(`random walk contract at ${timeMs}ms`, async () => {
       if (!page) {
         throw new Error("Expected test page to be initialized in beforeAll.");
       }
 
       const testPage = page;
-      const actual = (await getRandomWalkContractText(testPage, timeMs)).trimEnd();
-      const fixturePath = getContractFixturePath(fixtureName);
+      const actual = (await fetchRandomWalkContractTextAtTimeMs(testPage, timeMs)).trimEnd();
+      const fixturePath = getRandomWalkContractFixturePath(fixtureName);
 
       if (SHOULD_UPDATE_CONTRACTS) {
         await mkdir(path.dirname(fixturePath), { recursive: true });
@@ -104,7 +104,7 @@ test.describe.serial("random-walk-world deterministic milestones contract", () =
         return;
       }
 
-      const expectedFixture = (await readContractFixture(fixtureName)).trimEnd();
+      const expectedFixture = (await readRandomWalkContractFixture(fixtureName)).trimEnd();
       expect(actual).toBe(expectedFixture);
     });
   }

@@ -9,17 +9,17 @@ const __dirname = path.dirname(__filename);
 
 const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 
-const MILESTONE_CASES = SHADER_MILESTONE_FRAMES.map((frame) => ({
+const SHADER_CONTRACT_MILESTONE_CASES = SHADER_MILESTONE_FRAMES.map((frame) => ({
   frame,
   fixtureName: `hello-shader-world.frame-${String(frame).padStart(3, "0")}.txt`,
 }));
 
-async function readContractFixture(fileName: string) {
+async function readShaderContractFixture(fileName: string) {
   const fixturePath = path.join(__dirname, "contracts", fileName);
   return readFile(fixturePath, "utf8");
 }
 
-async function waitForTestApis(page: Page) {
+async function waitForShaderContractTestGlobals(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => ({
@@ -31,7 +31,7 @@ async function waitForTestApis(page: Page) {
     .toEqual({ hasGetContract: true, hasGetFrame: true, hasReset: true });
 }
 
-async function resetSimulation(page: Page) {
+async function resetShaderSimulationForContractMilestones(page: Page) {
   await expect
     .poll(
       async () => {
@@ -53,7 +53,7 @@ async function resetSimulation(page: Page) {
     .toBe(true);
 }
 
-async function getShaderContractText(page: Page, frame: number) {
+async function fetchShaderContractTextAtFrame(page: Page, frame: number) {
   return page.evaluate(async ({ targetFrame }: { targetFrame: number }) => {
     if (typeof window.__GET_SHADER_CONTRACT_TEXT__ !== "function") {
       throw new Error("window.__GET_SHADER_CONTRACT_TEXT__ is not available.");
@@ -80,11 +80,11 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
     if (pageErrors.length > 0) {
       throw new Error(`Shader page runtime error: ${pageErrors[0]}`);
     }
-    await waitForTestApis(setupPage);
-    await resetSimulation(setupPage);
+    await waitForShaderContractTestGlobals(setupPage);
+    await resetShaderSimulationForContractMilestones(setupPage);
   });
 
-  for (const { frame, fixtureName } of MILESTONE_CASES) {
+  for (const { frame, fixtureName } of SHADER_CONTRACT_MILESTONE_CASES) {
     test(`shader contract at frame ${frame}`, async () => {
       if (!page) {
         throw new Error("Expected test page to be initialized in beforeAll.");
@@ -92,13 +92,13 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
 
       const testPage = page;
 
-      const expectedFixture = await readContractFixture(fixtureName);
+      const expectedFixture = await readShaderContractFixture(fixtureName);
 
       await expect
         .poll(
           async () => {
             try {
-              return await getShaderContractText(testPage, frame);
+              return await fetchShaderContractTextAtFrame(testPage, frame);
             } catch {
               return null;
             }

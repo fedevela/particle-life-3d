@@ -12,7 +12,7 @@ const CONTRACTS_DIR = path.join(__dirname, "contracts");
 const CONTRACT_MILESTONES_MS = [0, 72, 144, 216, 288, 360] as const;
 const SHOULD_UPDATE_CONTRACTS = process.env.UPDATE_RANDOM_WALK_CONTRACTS === "1";
 
-async function waitForRandomWalkTestApis(page: Page) {
+async function waitForRandomWalkTestGlobals(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => ({
@@ -23,7 +23,7 @@ async function waitForRandomWalkTestApis(page: Page) {
     .toEqual({ hasGetContract: true, hasReset: true });
 }
 
-async function waitForRandomWalkCameraApi(page: Page) {
+async function waitForRandomWalkCameraGlobal(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => typeof window.__GET_RANDOM_WALK_CAMERA_STATE__ === "function");
@@ -31,7 +31,7 @@ async function waitForRandomWalkCameraApi(page: Page) {
     .toBe(true);
 }
 
-async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
+async function fetchRandomWalkContractAtMilestoneMs(page: Page, timeMs = 0) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await page.evaluate(async ({ targetTimeMs }: { targetTimeMs: number }) => {
@@ -49,7 +49,7 @@ async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
         throw error;
       }
       if (isApiUnavailable) {
-        await waitForRandomWalkTestApis(page);
+        await waitForRandomWalkTestGlobals(page);
       }
       await page.waitForTimeout(100);
     }
@@ -58,7 +58,7 @@ async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
   throw new Error("Failed to read random walk contract text after retries.");
 }
 
-async function resetRandomWalkSimulation(page: Page) {
+async function resetRandomWalkSimulationForScenario(page: Page) {
   await page.evaluate(async () => {
     if (typeof window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ !== "function") {
       throw new Error("window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ is not available.");
@@ -67,7 +67,7 @@ async function resetRandomWalkSimulation(page: Page) {
   });
 }
 
-async function getRandomWalkCameraState(page: Page) {
+async function fetchRandomWalkCameraState(page: Page) {
   return page.evaluate(() => {
     if (typeof window.__GET_RANDOM_WALK_CAMERA_STATE__ !== "function") {
       throw new Error("window.__GET_RANDOM_WALK_CAMERA_STATE__ is not available.");
@@ -116,7 +116,7 @@ async function assertScenarioContracts(page: Page, scenario: string) {
   if (SHOULD_UPDATE_CONTRACTS) {
     const capturedContracts: Array<{ milestoneMs: number; actual: string }> = [];
     for (const milestoneMs of CONTRACT_MILESTONES_MS) {
-      const actual = (await getRandomWalkContractAtTimeMs(page, milestoneMs)).trimEnd();
+      const actual = (await fetchRandomWalkContractAtMilestoneMs(page, milestoneMs)).trimEnd();
       capturedContracts.push({ milestoneMs, actual });
     }
 
@@ -129,7 +129,7 @@ async function assertScenarioContracts(page: Page, scenario: string) {
   }
 
   for (const milestoneMs of CONTRACT_MILESTONES_MS) {
-    const actual = (await getRandomWalkContractAtTimeMs(page, milestoneMs)).trimEnd();
+    const actual = (await fetchRandomWalkContractAtMilestoneMs(page, milestoneMs)).trimEnd();
     const fixturePath = getScenarioContractPath(scenario, milestoneMs);
     const expected = (await readFile(fixturePath, "utf8")).trimEnd();
     expect(actual).toBe(expected);
@@ -138,7 +138,7 @@ async function assertScenarioContracts(page: Page, scenario: string) {
 
 async function openRandomWalkControls(page: Page, seed: string) {
   await page.goto(`/random-walk-world?testMode=true&seed=${seed}`);
-  await waitForRandomWalkTestApis(page);
+  await waitForRandomWalkTestGlobals(page);
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
   if (!(await dotCountInput.isVisible())) {
@@ -150,7 +150,7 @@ async function openRandomWalkControls(page: Page, seed: string) {
   await expect(page.locator("#random-walk-world-dotCount")).toBeVisible();
   await expect(page.locator("#random-walk-world-stepScale")).toBeVisible();
   await expect(page.locator("#random-walk-world-boundaryExtent")).toBeVisible();
-  await waitForRandomWalkCameraApi(page);
+  await waitForRandomWalkCameraGlobal(page);
 }
 
 test("menu link opens random-walk scene and controls", async ({ page }) => {
@@ -175,15 +175,15 @@ test("dot count input updates and clamps", async ({ page }) => {
 
   await dotCountInput.fill("4096");
   await expect(dotCountInput).toHaveValue("4096");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=4096");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("dot_count=4096");
 
   await dotCountInput.fill("1");
   await expect(dotCountInput).toHaveValue("64");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=64");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("dot_count=64");
 
   await dotCountInput.fill("999999");
   await expect(dotCountInput).toHaveValue("100000");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=100000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("dot_count=100000");
   await assertScenarioContracts(page, "random-walk-world.ui-dot-count-clamp");
 });
 
@@ -193,15 +193,15 @@ test("step scale input updates and clamps", async ({ page }) => {
 
   await stepScaleInput.fill("0.023");
   await expect(stepScaleInput).toHaveValue("0.023");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("step_scale=0.0230");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("step_scale=0.0230");
 
   await stepScaleInput.fill("0");
   await expect(stepScaleInput).toHaveValue("0.001");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("step_scale=0.0010");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("step_scale=0.0010");
 
   await stepScaleInput.fill("0.999");
   await expect(stepScaleInput).toHaveValue("0.100");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("step_scale=0.1000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("step_scale=0.1000");
   await assertScenarioContracts(page, "random-walk-world.ui-step-scale-clamp");
 });
 
@@ -211,15 +211,15 @@ test("boundary extent input updates and clamps", async ({ page }) => {
 
   await boundaryExtentInput.fill("4.75");
   await expect(boundaryExtentInput).toHaveValue("4.75");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=4.7500");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_extent=4.7500");
 
   await boundaryExtentInput.fill("0");
   await expect(boundaryExtentInput).toHaveValue("0.25");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=0.2500");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_extent=0.2500");
 
   await boundaryExtentInput.fill("99999");
   await expect(boundaryExtentInput).toHaveValue("25000.00");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=25000.0000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_extent=25000.0000");
   await assertScenarioContracts(page, "random-walk-world.ui-boundary-extent-clamp");
 });
 
@@ -278,12 +278,12 @@ test("peer influence controls are toggle-gated and expose peer impulse scale", a
   const peerImpulseScaleInput = page.locator("#random-walk-world-peerImpulseScale");
   await expect(peerImpulseScaleInput).toBeVisible();
   await expect(peerImpulseScaleInput).toHaveValue("1.00");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("mode=peer-influenced-random-walk");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("push_strength=1.0000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("mode=peer-influenced-random-walk");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("push_strength=1.0000");
 
   await peerImpulseScaleInput.fill("0.22");
   await expect(peerImpulseScaleInput).toHaveValue("0.22");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("push_strength=0.2200");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("push_strength=0.2200");
 });
 
 test("deterministic seed input reproduces identical contracts for same value and changes when value changes", async ({
@@ -295,15 +295,15 @@ test("deterministic seed input reproduces identical contracts for same value and
   await seedInput.fill("issue-34-seed-a");
   await expect(seedInput).toHaveValue("issue-34-seed-a");
 
-  const seedAAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  const seedAAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   await seedInput.fill("issue-34-seed-b");
   await expect(seedInput).toHaveValue("issue-34-seed-b");
-  const seedBAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  const seedBAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   expect(seedBAt216).not.toBe(seedAAt216);
 
   await seedInput.fill("issue-34-seed-a");
   await expect(seedInput).toHaveValue("issue-34-seed-a");
-  const seedAReplayAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  const seedAReplayAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   expect(seedAReplayAt216).toBe(seedAAt216);
 });
 
@@ -317,17 +317,17 @@ test("ambient friction updates on next frame and increases halting trend when ra
   const frictionInput = page.locator("#random-walk-world-ambientFriction");
   await frictionInput.fill("0.00");
   await expect(frictionInput).toHaveValue("0.00");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("ambient_friction=0.0000");
-  const lowFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("ambient_friction=0.0000");
+  const lowFrictionAvgSpeed = parseContractMetric(await fetchRandomWalkContractAtMilestoneMs(page, 360), "avg_speed");
 
   await frictionInput.fill("0.90");
   await expect(frictionInput).toHaveValue("0.90");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("ambient_friction=0.9000");
-  const highFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("ambient_friction=0.9000");
+  const highFrictionAvgSpeed = parseContractMetric(await fetchRandomWalkContractAtMilestoneMs(page, 360), "avg_speed");
   expect(highFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
 
-  await resetRandomWalkSimulation(page);
-  const postResetHighFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+  await resetRandomWalkSimulationForScenario(page);
+  const postResetHighFrictionAvgSpeed = parseContractMetric(await fetchRandomWalkContractAtMilestoneMs(page, 360), "avg_speed");
   expect(postResetHighFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
 });
 
@@ -341,7 +341,7 @@ test("camera orbit and zoom controls remain functional after parameter edits", a
     throw new Error("Expected canvas bounds to be available.");
   }
 
-  const initialCamera = await getRandomWalkCameraState(page);
+  const initialCamera = await fetchRandomWalkCameraState(page);
   const initialDistance = parseCameraDistance(initialCamera);
 
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
@@ -350,7 +350,7 @@ test("camera orbit and zoom controls remain functional after parameter edits", a
   await page.mouse.up();
   await page.waitForTimeout(120);
 
-  const rotatedCamera = await getRandomWalkCameraState(page);
+  const rotatedCamera = await fetchRandomWalkCameraState(page);
   expect(rotatedCamera.position).not.toEqual(initialCamera.position);
 
   await page.locator("#random-walk-world-seed").fill("issue-34-camera-seed");
@@ -361,7 +361,7 @@ test("camera orbit and zoom controls remain functional after parameter edits", a
   await page.mouse.wheel(0, -420);
   await page.waitForTimeout(120);
 
-  const zoomedCamera = await getRandomWalkCameraState(page);
+  const zoomedCamera = await fetchRandomWalkCameraState(page);
   const zoomedDistance = parseCameraDistance(zoomedCamera);
   expect(zoomedDistance).toBeLessThan(initialDistance);
 
@@ -371,7 +371,7 @@ test("camera orbit and zoom controls remain functional after parameter edits", a
   await page.mouse.up();
   await page.waitForTimeout(120);
 
-  const finalCamera = await getRandomWalkCameraState(page);
+  const finalCamera = await fetchRandomWalkCameraState(page);
   expect(finalCamera.position).not.toEqual(zoomedCamera.position);
 });
 
@@ -387,8 +387,8 @@ test("frame progression stays bounded and deterministic across milestone updates
   const milestones = [0, 72, 144, 216, 288, 360] as const;
   const contracts: string[] = [];
   for (const timeMs of milestones) {
-    await resetRandomWalkSimulation(page);
-    contracts.push(await getRandomWalkContractAtTimeMs(page, timeMs));
+    await resetRandomWalkSimulationForScenario(page);
+    contracts.push(await fetchRandomWalkContractAtMilestoneMs(page, timeMs));
   }
   const frames = contracts.map((contract) => parseContractFrame(contract));
   const speeds = contracts.map((contract) => parseContractMetric(contract, "avg_speed"));
