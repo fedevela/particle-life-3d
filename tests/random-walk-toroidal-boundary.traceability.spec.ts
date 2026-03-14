@@ -5,6 +5,7 @@ type RequirementTrace = {
   obligation: string;
   verificationLocus: string;
   pseudocodeLocus: string;
+  architectureLoci: readonly string[];
   cases: readonly string[];
 };
 
@@ -15,6 +16,13 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
       "Selecting the third left menu option exposes a random-walk WebGL dot-cloud view with label and parameter controls.",
     verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
     pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
+    architectureLoci: [
+      "app/routes/random-walk-world.tsx",
+      "app/features/3d/random-walk-world-page.tsx",
+      "app/state/ui-store.ts",
+      "app/routes/dashboard-shell.tsx",
+      "app/types/random-walk-world.ts",
+    ],
     cases: [
       "menu.third-option.selection.initializes-random-walk-dot-cloud-scene",
       "menu.third-option.label.identifies-random-walk-sphere-visualization",
@@ -27,6 +35,11 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
       "Dot transitions across invisible cube boundaries wrap to opposite side while preserving velocity in toroidal space.",
     verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
     pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
+    architectureLoci: [
+      "app/features/3d/random-walk-world-physics-seam.ts",
+      "app/types/random-walk-world.ts",
+      "app/features/3d/random-walk-world-page.tsx",
+    ],
     cases: [
       "toroidal-boundary.positive-axis.crossing.wraps-to-opposite-side",
       "toroidal-boundary.negative-axis.crossing.wraps-to-opposite-side",
@@ -52,6 +65,15 @@ test.describe("Issue #32 random-walk toroidal-boundary traceability contracts", 
       test(`${requirement.id} is mapped to a concrete pseudocode locus`, () => {
         expect(requirement.pseudocodeLocus.length).toBeGreaterThan(0);
         expect(requirement.pseudocodeLocus.endsWith(".pseudocode.ts")).toBe(true);
+        expect(true).toBe(true);
+      });
+
+      test(`${requirement.id} is mapped to concrete architecture loci`, () => {
+        expect(requirement.architectureLoci.length).toBeGreaterThan(0);
+        for (const locus of requirement.architectureLoci) {
+          expect(locus.length).toBeGreaterThan(0);
+          expect(locus.endsWith(".ts") || locus.endsWith(".tsx")).toBe(true);
+        }
         expect(true).toBe(true);
       });
 
