@@ -130,8 +130,8 @@ test("dot count input updates and clamps", async ({ page }) => {
   await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=64");
 
   await dotCountInput.fill("999999");
-  await expect(dotCountInput).toHaveValue("65536");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=65536");
+  await expect(dotCountInput).toHaveValue("100000");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("dot_count=100000");
   await assertScenarioContracts(page, "random-walk-world.ui-dot-count-clamp");
 });
 
@@ -165,9 +165,9 @@ test("boundary extent input updates and clamps", async ({ page }) => {
   await expect(boundaryExtentInput).toHaveValue("0.25");
   await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=0.2500");
 
-  await boundaryExtentInput.fill("9999");
-  await expect(boundaryExtentInput).toHaveValue("1000.00");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=1000.0000");
+  await boundaryExtentInput.fill("99999");
+  await expect(boundaryExtentInput).toHaveValue("25000.00");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=25000.0000");
   await assertScenarioContracts(page, "random-walk-world.ui-boundary-extent-clamp");
 });
 
@@ -198,9 +198,9 @@ test("wheel respects min and max clamps", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-wheel-clamp-controls");
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
-  await dotCountInput.fill("65536");
+  await dotCountInput.fill("100000");
   await wheelInput(dotCountInput, -120);
-  await expect(dotCountInput).toHaveValue("65536");
+  await expect(dotCountInput).toHaveValue("100000");
 
   const stepScaleInput = page.locator("#random-walk-world-stepScale");
   await stepScaleInput.fill("0.001");
@@ -208,9 +208,9 @@ test("wheel respects min and max clamps", async ({ page }) => {
   await expect(stepScaleInput).toHaveValue("0.001");
 
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
-  await boundaryExtentInput.fill("1000");
+  await boundaryExtentInput.fill("25000");
   await wheelInput(boundaryExtentInput, -120);
-  await expect(boundaryExtentInput).toHaveValue("1000.00");
+  await expect(boundaryExtentInput).toHaveValue("25000.00");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
 

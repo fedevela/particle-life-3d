@@ -1,8 +1,3 @@
-/** Issue #32 architecture contract mapping: CH-001, CH-003. */
-export const ISSUE_32_RANDOM_WALK_ARCH_REQUIREMENTS = ["CH-001", "CH-003"] as const;
-/** Issue #33 architecture contract mapping: CH-004, CH-005, CH-005-A, CH-008. */
-export const ISSUE_33_RANDOM_WALK_ARCH_REQUIREMENTS = ["CH-004", "CH-005", "CH-005-A", "CH-008"] as const;
-
 /** Define the sidebar route label and path for the random-walk surface (CH-001). */
 export const RANDOM_WALK_WORLD_ROUTE_PATH = "/random-walk-world";
 export const RANDOM_WALK_WORLD_MENU_LABEL = "Swarm Simulator";
@@ -58,7 +53,7 @@ export const RANDOM_WALK_WORLD_PARAM_CONTROLS: Record<RandomWalkWorldParamKey, R
   dotCount: {
     label: "Dot Count",
     min: 64,
-    max: 65536,
+    max: 100000,
     step: 64,
     tooltip: "How many dots are moving in the scene.",
   },
@@ -72,7 +67,7 @@ export const RANDOM_WALK_WORLD_PARAM_CONTROLS: Record<RandomWalkWorldParamKey, R
   boundaryExtent: {
     label: "Boundary Extent",
     min: 0.25,
-    max: 1000,
+    max: 25000,
     step: 0.05,
     tooltip: "How far dots can move from center before wrapping to the other side.",
   },
@@ -110,7 +105,7 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
   velocityBiasWeight: {
     label: "Keep Direction",
     min: 0,
-    max: 2,
+    max: 3,
     step: 0.01,
     tooltip: "How much a dot prefers continuing in its current direction.",
   },
@@ -124,7 +119,7 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
   peerImpulseScale: {
     label: "Push Strength",
     min: 0,
-    max: 2,
+    max: 3,
     step: 0.01,
     tooltip: "Overall strength of movement pushes each update.",
   },

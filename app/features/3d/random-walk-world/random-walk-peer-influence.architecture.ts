@@ -17,7 +17,6 @@ import type {
 import type { RandomWalkWorldPhysicsParams } from "~/types/random-walk-world";
 
 export * from "~/features/3d/random-walk-world/peer-influence/contracts";
-export * from "~/features/3d/random-walk-world/peer-influence/traceability";
 
 export type RandomWalkPeerInfluenceArchitecturePort = {
   deriveAmbientFrictionDecayPlan: (input: AmbientFrictionInput) => AmbientFrictionOutput;
