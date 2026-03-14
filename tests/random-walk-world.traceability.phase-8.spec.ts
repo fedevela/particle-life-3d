@@ -19,6 +19,27 @@ test.describe("Issue #33 phase 8 implementation traceability", () => {
     expect(result.reachedNearHalt).toBe(false);
   });
 
+  test("CH-004 ambient friction factor is clamped to unit interval", () => {
+    const port = createRandomWalkPeerInfluenceArchitecturePort();
+
+    const fullStop = port.deriveAmbientFrictionDecayPlan({
+      velocity: [0.5, -0.25, 0.125],
+      frictionFactor: 2,
+    });
+    expect(fullStop.decayedVelocity[0]).toBeCloseTo(0, 6);
+    expect(fullStop.decayedVelocity[1]).toBeCloseTo(0, 6);
+    expect(fullStop.decayedVelocity[2]).toBeCloseTo(0, 6);
+    expect(fullStop.reachedNearHalt).toBe(true);
+
+    const unchanged = port.deriveAmbientFrictionDecayPlan({
+      velocity: [0.5, -0.25, 0.125],
+      frictionFactor: -1,
+    });
+    expect(unchanged.decayedVelocity[0]).toBeCloseTo(0.5, 6);
+    expect(unchanged.decayedVelocity[1]).toBeCloseTo(-0.25, 6);
+    expect(unchanged.decayedVelocity[2]).toBeCloseTo(0.125, 6);
+  });
+
   test("CH-005 neighbor average direction aggregates peers within 3D radius", () => {
     const port = createRandomWalkPeerInfluenceArchitecturePort();
 
@@ -94,5 +115,35 @@ test.describe("Issue #33 phase 8 implementation traceability", () => {
     const regularLater = regular.getContractTextAtFrame(72);
     const peerLater = peerInfluenced.getContractTextAtFrame(72);
     expect(regularLater).not.toBe(peerLater);
+  });
+
+  test("CH-005-A frame update plan changes stages by mode", () => {
+    const port = createRandomWalkPeerInfluenceArchitecturePort();
+
+    const regular = port.deriveFrameUpdatePlan({
+      mode: "regular-random-walk",
+      frictionFactor: 0.2,
+      peerRadius: 1.2,
+      velocityBiasWeight: 0.5,
+      peerBiasWeight: 0.5,
+    });
+    expect(regular.orderedStages).toEqual([
+      "resolve-mode",
+      "integrate-velocity-and-position",
+      "enforce-bounded-stability",
+    ]);
+    expect(regular.obligationsSatisfied).toEqual(["CH-005-A"]);
+
+    const peer = port.deriveFrameUpdatePlan({
+      mode: "peer-influenced-random-walk",
+      frictionFactor: 0.2,
+      peerRadius: 1.2,
+      velocityBiasWeight: 0.5,
+      peerBiasWeight: 0.5,
+    });
+    expect(peer.orderedStages).toContain("apply-ambient-friction");
+    expect(peer.orderedStages).toContain("compute-peer-average-direction");
+    expect(peer.orderedStages).toContain("derive-dual-bias-impulse");
+    expect(peer.obligationsSatisfied).toEqual(["CH-004", "CH-005", "CH-005-A", "CH-008"]);
   });
 });

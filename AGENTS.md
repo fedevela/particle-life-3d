@@ -26,9 +26,8 @@ Protect those properties first. Fancy rendering is a feature; reproducible behav
 ## Read Order Before Non-Trivial Changes
 
 1. `README.md`
-2. `ARCHITECTURE.md`
-3. `app/routes.ts`
-4. The route + feature + test files for the target surface
+2. `app/routes.ts`
+3. The route + feature + test files for the target surface
 
 ## Guardrails
 
@@ -140,6 +139,13 @@ Then rerun without the env var and confirm green.
 - `app/features/3d/hello-shader-world/hello-shader-world-simulation.ts`: deterministic GPU stepping + milestone capture
 - `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`: shader contract text generation
 - `app/features/3d/random-walk-world/random-walk-world-page.tsx`: random-walk page + test API wiring
+- `app/features/3d/random-walk-world/random-walk-world-simulation.ts`: simulation orchestrator and frame stepping
+- `app/features/3d/random-walk-world/simulation/random-walk-simulation-contract.ts`: deterministic random-walk contract text generation
+- `app/features/3d/random-walk-world/simulation/random-walk-simulation-rng.ts`: seed hashing and deterministic RNG stepping
+- `app/features/3d/random-walk-world/random-walk-peer-influence.architecture.ts`: peer-influence architecture port entrypoint
+- `app/features/3d/random-walk-world/peer-influence/contracts.ts`: typed CH-004/005/005-A/008 contract and pseudocode artifacts
+- `app/features/3d/random-walk-world/peer-influence/runtime.ts`: peer-influence runtime derivation functions
+- `app/features/3d/random-walk-world/peer-influence/traceability.ts`: architecture pressure and loci mappings
 - `app/db/client-bridge/bridge.ts`: browser-to-worker persistence seam
 - `app/db/worker/messages.ts`: worker contract types
 - `app/db/worker/worker.ts`: request handling and SQLite runtime

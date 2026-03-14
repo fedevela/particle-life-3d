@@ -3,14 +3,15 @@ import {
   createRandomWalkPhysicsArchitectureBindings,
   type RandomWalkPeerInfluenceArchitecturePort,
 } from "~/features/3d/random-walk-world/random-walk-peer-influence.architecture";
+import { buildRandomWalkContractText } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-contract";
+import { hashSeed, nextRandomFromState } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-rng";
 import {
   DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
   type RandomWalkWorldPhysicsParams,
   type RandomWalkWorldParams,
 } from "~/types/random-walk-world";
 
-const RANDOM_WALK_FIXED_FPS = 60;
-const RANDOM_WALK_FRAME_DURATION_MS = 1000 / RANDOM_WALK_FIXED_FPS;
+const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
 const REGULAR_IMPULSE_SCALE_FACTOR = 0.15;
 
@@ -21,30 +22,6 @@ function normalizeDirection(x: number, y: number, z: number): [number, number, n
   }
 
   return [x / length, y / length, z / length];
-}
-
-function hashSeed(seed: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function hashString(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-function formatScalar(value: number) {
-  return value.toFixed(4);
 }
 
 export function getRandomWalkFrameForTimeMs(timeMs: number) {
@@ -251,10 +228,9 @@ export class RandomWalkWorldSimulation {
   }
 
   private nextRandom() {
-    this.rngState ^= this.rngState << 13;
-    this.rngState ^= this.rngState >>> 17;
-    this.rngState ^= this.rngState << 5;
-    return (this.rngState >>> 0) / 4294967296;
+    const { nextState, value } = nextRandomFromState(this.rngState);
+    this.rngState = nextState;
+    return value;
   }
 
   private nextSignedRandom() {
@@ -274,66 +250,13 @@ export class RandomWalkWorldSimulation {
   }
 
   private buildContractText() {
-    let sumX = 0;
-    let sumY = 0;
-    let sumZ = 0;
-    let sumSpeed = 0;
-    let maxRadius = 0;
-
-    for (let index = 0; index < this.params.dotCount; index += 1) {
-      const offset = index * 3;
-      const x = this.positions[offset];
-      const y = this.positions[offset + 1];
-      const z = this.positions[offset + 2];
-      const vx = this.velocities[offset];
-      const vy = this.velocities[offset + 1];
-      const vz = this.velocities[offset + 2];
-
-      sumX += x;
-      sumY += y;
-      sumZ += z;
-      sumSpeed += Math.hypot(vx, vy, vz);
-      maxRadius = Math.max(maxRadius, Math.hypot(x, y, z));
-    }
-
-    const dotCount = this.params.dotCount || 1;
-    const sample0 = this.sampleAt(0);
-    const sample1 = this.sampleAt(1);
-    const sample2 = this.sampleAt(2);
-
-    const bodyLines = [
-      "[random-walk]",
-      `frame=${this.frame}`,
-      `dot_count=${this.params.dotCount}`,
-      `step_scale=${formatScalar(this.params.stepScale)}`,
-      `boundary_extent=${formatScalar(this.params.boundaryExtent)}`,
-      `avg_x=${formatScalar(sumX / dotCount)}`,
-      `avg_y=${formatScalar(sumY / dotCount)}`,
-      `avg_z=${formatScalar(sumZ / dotCount)}`,
-      `avg_speed=${formatScalar(sumSpeed / dotCount)}`,
-      `max_radius=${formatScalar(maxRadius)}`,
-      `sample_0=${sample0}`,
-      `sample_1=${sample1}`,
-      `sample_2=${sample2}`,
-    ];
-
-    const checksum = hashString(bodyLines.join("\n"));
-    return [...bodyLines, `checksum=${checksum}`].join("\n");
-  }
-
-  private sampleAt(index: number) {
-    const offset = index * 3;
-    if (offset + 2 >= this.positions.length) {
-      return "0.0000,0.0000,0.0000,0.0000,0.0000,0.0000";
-    }
-
-    return [
-      formatScalar(this.positions[offset]),
-      formatScalar(this.positions[offset + 1]),
-      formatScalar(this.positions[offset + 2]),
-      formatScalar(this.velocities[offset]),
-      formatScalar(this.velocities[offset + 1]),
-      formatScalar(this.velocities[offset + 2]),
-    ].join(",");
+    return buildRandomWalkContractText({
+      frame: this.frame,
+      dotCount: this.params.dotCount,
+      stepScale: this.params.stepScale,
+      boundaryExtent: this.params.boundaryExtent,
+      positions: this.positions,
+      velocities: this.velocities,
+    });
   }
 }
