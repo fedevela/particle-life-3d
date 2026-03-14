@@ -12,6 +12,16 @@ import {
 const RANDOM_WALK_FIXED_FPS = 60;
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / RANDOM_WALK_FIXED_FPS;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
+const IMPULSE_SCALE_FACTOR = 0.15;
+
+function normalizeDirection(x: number, y: number, z: number): [number, number, number] {
+  const length = Math.hypot(x, y, z);
+  if (!Number.isFinite(length) || length <= 1e-6) {
+    return [0, 0, 0];
+  }
+
+  return [x / length, y / length, z / length];
+}
 
 function hashSeed(seed: string) {
   let hash = 2166136261;
@@ -85,7 +95,7 @@ export class RandomWalkWorldSimulation {
   }
 
   public stepFrame() {
-    void this.peerInfluencePort.deriveFrameUpdatePlan({
+    const framePlan = this.peerInfluencePort.deriveFrameUpdatePlan({
       mode: this.physicsParams.mode,
       frictionFactor: this.physicsParams.ambientFriction,
       peerRadius: this.physicsParams.peerInfluenceRadius,
@@ -98,6 +108,25 @@ export class RandomWalkWorldSimulation {
       max: [this.params.boundaryExtent, this.params.boundaryExtent, this.params.boundaryExtent] as const,
     };
     const maxSpeed = this.params.stepScale * 3;
+    const frameDots =
+      framePlan.mode === "peer-influenced-random-walk"
+        ? Array.from({ length: this.params.dotCount }, (_, dotIndex) => {
+            const offset = dotIndex * 3;
+            return {
+              dotIndex,
+              position: [
+                this.positions[offset],
+                this.positions[offset + 1],
+                this.positions[offset + 2],
+              ] as const,
+              velocity: [
+                this.velocities[offset],
+                this.velocities[offset + 1],
+                this.velocities[offset + 2],
+              ] as const,
+            };
+          })
+        : null;
 
     for (let index = 0; index < this.params.dotCount; index += 1) {
       const offset = index * 3;
@@ -105,9 +134,42 @@ export class RandomWalkWorldSimulation {
       let vy = this.velocities[offset + 1];
       let vz = this.velocities[offset + 2];
 
-      vx += this.nextSignedRandom() * this.params.stepScale * 0.15;
-      vy += this.nextSignedRandom() * this.params.stepScale * 0.15;
-      vz += this.nextSignedRandom() * this.params.stepScale * 0.15;
+      if (framePlan.mode === "regular-random-walk") {
+        vx += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vy += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vz += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+      } else {
+        const friction = this.peerInfluencePort.deriveAmbientFrictionDecayPlan({
+          velocity: [vx, vy, vz],
+          frictionFactor: this.physicsParams.ambientFriction,
+        });
+        vx = friction.decayedVelocity[0];
+        vy = friction.decayedVelocity[1];
+        vz = friction.decayedVelocity[2];
+
+        const velocityDirection = normalizeDirection(vx, vy, vz);
+        const neighborAggregate = this.peerInfluencePort.deriveNeighborAverageDirectionPlan({
+          subjectDotIndex: index,
+          neighborRadius: this.physicsParams.peerInfluenceRadius,
+          frameDots: frameDots ?? [],
+        });
+        const randomDirection = normalizeDirection(
+          this.nextSignedRandom(),
+          this.nextSignedRandom(),
+          this.nextSignedRandom(),
+        );
+        const impulseDirection = this.peerInfluencePort.deriveDualBiasImpulseDirectionPlan({
+          randomUnitDirection: randomDirection,
+          currentVelocityDirection: velocityDirection,
+          peerAverageDirection: neighborAggregate.averageDirection,
+          velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+          peerBiasWeight: this.physicsParams.peerBiasWeight,
+        });
+
+        vx += impulseDirection.biasedDirection[0] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vy += impulseDirection.biasedDirection[1] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vz += impulseDirection.biasedDirection[2] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+      }
 
       const speed = Math.hypot(vx, vy, vz);
       if (speed > maxSpeed && speed > 0) {
