@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createRandomWalkToroidalPhysicsPort } from "../app/features/3d/random-walk-world-physics-seam";
+import { createRandomWalkToroidalPhysicsPort } from "../../app/features/3d/random-walk-world/random-walk-world-physics-seam";
 
 test("random-walk-world is accessible from third left menu option with controls and canvas", async ({ page }) => {
   await page.goto("/");

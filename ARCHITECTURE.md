@@ -68,14 +68,14 @@ Sidebar state is held in Zustand (`app/state/ui-store.ts`).
 
 ## Feature layer (3D)
 
-- `app/features/3d/particle-page.tsx`
+- `app/features/3d/hello-world/particle-page.tsx`
   - owns the full-screen `Canvas` and camera defaults.
-- `app/features/3d/particle-scene.tsx`
+- `app/features/3d/hello-world/particle-scene.tsx`
   - loads sprite entities through `useSprites`,
   - validates supported sprite type(s),
   - renders scene helpers/lights/meshes,
   - mounts `CameraPersistenceControls`.
-- `app/features/3d/camera-persistence-controls.tsx`
+- `app/features/3d/hello-world/camera-persistence-controls.tsx`
   - restores saved camera state on mount,
   - throttles camera save operations on control end.
 

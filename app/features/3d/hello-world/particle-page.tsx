@@ -8,9 +8,9 @@ import {
 import type { ContractScope } from "~/db/worker/messages";
 import type {
   CameraPersistenceTestApi,
-} from "~/features/3d/camera-persistence-controls";
-import type { CameraAction } from "~/features/3d/camera-actions";
-import { ParticleScene } from "~/features/3d/particle-scene";
+} from "~/features/3d/hello-world/camera-persistence-controls";
+import type { CameraAction } from "~/features/3d/hello-world/camera-actions";
+import { ParticleScene } from "~/features/3d/hello-world/particle-scene";
 
 /** Define the persistent scene project for non-test runtime URLs. */
 const UI_PROJECT_ID_STORAGE_KEY = "particle-life:ui-project-id";

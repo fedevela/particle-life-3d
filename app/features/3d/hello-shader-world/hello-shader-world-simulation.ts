@@ -1,8 +1,8 @@
 import { GPUComputationRenderer, type Variable } from "three/examples/jsm/misc/GPUComputationRenderer.js";
 import * as THREE from "three";
 
-import computeShader from "~/features/3d/shaders/hello-shader-world.compute.frag";
-import { getShaderContractText } from "~/features/3d/hello-shader-world-contract";
+import computeShader from "~/features/3d/hello-shader-world/shaders/hello-shader-world.compute.frag";
+import { getShaderContractText } from "~/features/3d/hello-shader-world/hello-shader-world-contract";
 import { createLogger } from "~/lib/logger";
 import {
   clampHelloShaderWorldMovementParams,

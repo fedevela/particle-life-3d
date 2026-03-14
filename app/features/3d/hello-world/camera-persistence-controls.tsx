@@ -3,7 +3,7 @@ import { useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { CAMERA_ACTION_STEP_VALUES, type CameraAction } from "~/features/3d/camera-actions";
+import { CAMERA_ACTION_STEP_VALUES, type CameraAction } from "~/features/3d/hello-world/camera-actions";
 import { loadCameraState, persistCameraState } from "~/db/client-bridge/bridge";
 import type { CameraState } from "~/db/types";
 import { createLogger } from "~/lib/logger";

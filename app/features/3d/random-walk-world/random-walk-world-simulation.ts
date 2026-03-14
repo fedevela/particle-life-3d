@@ -1,4 +1,4 @@
-import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world-physics-seam";
+import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
 import type { RandomWalkWorldParams } from "~/types/random-walk-world";
 
 const RANDOM_WALK_FIXED_FPS = 60;

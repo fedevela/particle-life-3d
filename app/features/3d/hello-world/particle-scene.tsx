@@ -4,7 +4,7 @@ import * as THREE from "three";
 import {
   CameraPersistenceControls,
   type CameraPersistenceTestApi,
-} from "~/features/3d/camera-persistence-controls";
+} from "~/features/3d/hello-world/camera-persistence-controls";
 import type { SpriteEntity } from "~/db/types";
 import { useSprites } from "~/hooks/use-sprites";
 

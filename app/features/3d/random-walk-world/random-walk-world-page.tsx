@@ -4,7 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
-import { RandomWalkWorldSimulation } from "~/features/3d/random-walk-world-simulation";
+import { RandomWalkWorldSimulation } from "~/features/3d/random-walk-world/random-walk-world-simulation";
 import { useUiStore } from "~/state/ui-store";
 import type { RandomWalkWorldParams } from "~/types/random-walk-world";
 
