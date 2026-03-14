@@ -13,6 +13,10 @@ const CAMERA_CONTRACT_CASES = CAMERA_ACTIONS.map((action, index) => ({
   fixtureName: `hello-world.camera.step-${String(index + 1).padStart(2, "0")}.txt`,
 }));
 
+function toCameraActionLabel(action: CameraAction) {
+  return action.replaceAll("_", " ");
+}
+
 async function readContractFixture(fileName: string) {
   const fixturePath = path.join(__dirname, "contracts", fileName);
   return readFile(fixturePath, "utf8");
@@ -67,7 +71,7 @@ async function deleteProjectData(page: Page, projectId: string) {
   }, { nextProjectId: projectId });
 }
 
-test.describe.serial("hello-world camera contract", () => {
+test.describe.serial("hello-world camera DB contract", () => {
   let context: BrowserContext | null = null;
   let page: Page | null = null;
   let projectId: string | null = null;
@@ -88,7 +92,7 @@ test.describe.serial("hello-world camera contract", () => {
   });
 
   for (const { action, fixtureName } of CAMERA_CONTRACT_CASES) {
-    test(`DB contract after ${action}`, async () => {
+    test(`camera action: ${toCameraActionLabel(action)}`, async () => {
       if (!page || !projectId) {
         throw new Error("Expected test page and projectId to be initialized in beforeAll.");
       }

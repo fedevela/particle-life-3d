@@ -6,7 +6,10 @@ type RequirementTrace = {
   verificationLocus: string;
   pseudocodeLocus: string;
   architectureLoci: readonly string[];
-  cases: readonly string[];
+  cases: readonly {
+    traceId: string;
+    title: string;
+  }[];
 };
 
 const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
@@ -24,9 +27,18 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
       "app/types/random-walk-world.ts",
     ],
     cases: [
-      "menu.third-option.selection.initializes-random-walk-dot-cloud-scene",
-      "menu.third-option.label.identifies-random-walk-sphere-visualization",
-      "menu.third-option.controls.render-parameter-editing-surface",
+      {
+        traceId: "menu.third-option.selection.initializes-random-walk-dot-cloud-scene",
+        title: "third menu option opens random-walk scene",
+      },
+      {
+        traceId: "menu.third-option.label.identifies-random-walk-sphere-visualization",
+        title: "third menu option shows random-walk label",
+      },
+      {
+        traceId: "menu.third-option.controls.render-parameter-editing-surface",
+        title: "third menu option shows parameter controls",
+      },
     ],
   },
   {
@@ -41,34 +53,46 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
       "app/features/3d/random-walk-world/random-walk-world-page.tsx",
     ],
     cases: [
-      "toroidal-boundary.positive-axis.crossing.wraps-to-opposite-side",
-      "toroidal-boundary.negative-axis.crossing.wraps-to-opposite-side",
-      "toroidal-boundary.wrap-transition.preserves-velocity-vector",
-      "toroidal-boundary.wrap-transition.remains-visually-seamless",
+      {
+        traceId: "toroidal-boundary.positive-axis.crossing.wraps-to-opposite-side",
+        title: "positive-axis crossing wraps to opposite side",
+      },
+      {
+        traceId: "toroidal-boundary.negative-axis.crossing.wraps-to-opposite-side",
+        title: "negative-axis crossing wraps to opposite side",
+      },
+      {
+        traceId: "toroidal-boundary.wrap-transition.preserves-velocity-vector",
+        title: "wrap transition preserves velocity vector",
+      },
+      {
+        traceId: "toroidal-boundary.wrap-transition.remains-visually-seamless",
+        title: "wrap transition remains visually seamless",
+      },
     ],
   },
 ] as const;
 
-test.describe("Issue #32 random-walk toroidal-boundary traceability contracts", () => {
+test.describe("Issue #32 random-walk traceability", () => {
   for (const requirement of ISSUE_32_TRACEABILITY) {
-    test.describe(`${requirement.id} obligation trace`, () => {
-      test(`${requirement.id} is mapped to a concrete verification locus`, () => {
+    test.describe(`${requirement.id} traceability`, () => {
+      test(`${requirement.id} verification locus is declared`, () => {
         expect(requirement.verificationLocus.length).toBeGreaterThan(0);
         expect(true).toBe(true);
       });
 
-      test(`${requirement.id} obligation statement is non-empty`, () => {
+      test(`${requirement.id} obligation text is non-empty`, () => {
         expect(requirement.obligation.length).toBeGreaterThan(0);
         expect(true).toBe(true);
       });
 
-      test(`${requirement.id} is mapped to a concrete pseudocode locus`, () => {
+      test(`${requirement.id} pseudocode locus is declared`, () => {
         expect(requirement.pseudocodeLocus.length).toBeGreaterThan(0);
         expect(requirement.pseudocodeLocus.endsWith(".pseudocode.ts")).toBe(true);
         expect(true).toBe(true);
       });
 
-      test(`${requirement.id} is mapped to concrete architecture loci`, () => {
+      test(`${requirement.id} architecture loci are declared`, () => {
         expect(requirement.architectureLoci.length).toBeGreaterThan(0);
         for (const locus of requirement.architectureLoci) {
           expect(locus.length).toBeGreaterThan(0);
@@ -77,9 +101,9 @@ test.describe("Issue #32 random-walk toroidal-boundary traceability contracts", 
         expect(true).toBe(true);
       });
 
-      for (const caseName of requirement.cases) {
-        test(`${requirement.id} :: ${caseName}`, () => {
-          expect(caseName.length).toBeGreaterThan(0);
+      for (const contractCase of requirement.cases) {
+        test(`${requirement.id} case: ${contractCase.title}`, () => {
+          expect(contractCase.traceId.length).toBeGreaterThan(0);
           expect(true).toBe(true);
         });
       }

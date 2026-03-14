@@ -72,7 +72,7 @@ async function openRandomWalkControls(page: Page, seed: string) {
   await expect(page.locator("#random-walk-world-boundaryExtent")).toBeVisible();
 }
 
-test("random-walk-world is accessible from third left menu option with controls and canvas", async ({ page }) => {
+test("menu link opens random-walk scene and controls", async ({ page }) => {
   await page.goto("/");
 
   const links = page.locator("aside nav a");
@@ -88,7 +88,7 @@ test("random-walk-world is accessible from third left menu option with controls 
   await expect(page.locator("#random-walk-world-boundaryExtent")).toBeVisible();
 });
 
-test("dotCount input action updates and clamps random walk params", async ({ page }) => {
+test("dot count input updates and clamps", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-dot-count-controls");
   const dotCountInput = page.locator("#random-walk-world-dotCount");
 
@@ -106,7 +106,7 @@ test("dotCount input action updates and clamps random walk params", async ({ pag
   await assertScenarioContracts(page, "random-walk-world.ui-dot-count-clamp");
 });
 
-test("stepScale input action updates and clamps random walk params", async ({ page }) => {
+test("step scale input updates and clamps", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-step-scale-controls");
   const stepScaleInput = page.locator("#random-walk-world-stepScale");
 
@@ -124,7 +124,7 @@ test("stepScale input action updates and clamps random walk params", async ({ pa
   await assertScenarioContracts(page, "random-walk-world.ui-step-scale-clamp");
 });
 
-test("boundaryExtent input action updates and clamps random walk params", async ({ page }) => {
+test("boundary extent input updates and clamps", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-boundary-controls");
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
 
@@ -142,7 +142,7 @@ test("boundaryExtent input action updates and clamps random walk params", async 
   await assertScenarioContracts(page, "random-walk-world.ui-boundary-extent-clamp");
 });
 
-test("wheel actions increment and decrement each random walk parameter control", async ({ page }) => {
+test("wheel increments and decrements all controls", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-wheel-controls");
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
@@ -168,7 +168,7 @@ test("wheel actions increment and decrement each random walk parameter control",
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-cycle");
 });
 
-test("wheel actions respect min and max clamp constraints for random walk controls", async ({ page }) => {
+test("wheel respects min and max clamps", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-wheel-clamp-controls");
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
@@ -191,7 +191,7 @@ test("wheel actions respect min and max clamp constraints for random walk contro
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
 
-test("toroidal boundary wrapping preserves velocity vector", async () => {
+test("toroidal wrap preserves velocity vector", async () => {
   const port = createRandomWalkToroidalPhysicsPort();
   const boundary = {
     min: [-1, -1, -1] as const,
