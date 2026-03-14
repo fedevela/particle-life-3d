@@ -48,10 +48,10 @@ When adding or changing pages:
 
 ## Test Invariants
 
-- `tests/hello-world.contract.spec.ts` validates the persisted DB contract as raw text.
-- `tests/hello-shader-world.contract.spec.ts` validates deterministic shader milestones as raw text.
+- `tests/hello-world/hello-world.contract.spec.ts` validates the persisted DB contract as raw text.
+- `tests/hello-shader-world/hello-shader-world.contract.spec.ts` validates deterministic shader milestones as raw text.
 - Do not replace those tests with image, pixel, or canvas snapshot assertions unless the repo direction changes explicitly.
-- Update fixtures under `tests/contracts/` only when the behavior change is intentional and verified.
+- Update fixtures under each target's `tests/*/contracts/` directory only when the behavior change is intentional and verified.
 - If route structure or types change, run `npm run typecheck` because it regenerates route types before `tsc`.
 
 ## Verification
@@ -66,10 +66,10 @@ Use the smallest relevant verification set first:
 ## High-Value Files
 
 - `app/routes.ts`: route tree
-- `app/features/3d/particle-page.tsx`: hello-world page and DB test API exposure
-- `app/features/3d/hello-shader-world-page.tsx`: shader-world page and shader test API exposure
-- `app/features/3d/camera-persistence-controls.tsx`: camera restore/persist behavior
-- `app/features/3d/hello-shader-world-contract.ts`: deterministic shader contract text generation
+- `app/features/3d/hello-world/particle-page.tsx`: hello-world page and DB test API exposure
+- `app/features/3d/hello-shader-world/hello-shader-world-page.tsx`: shader-world page and shader test API exposure
+- `app/features/3d/hello-world/camera-persistence-controls.tsx`: camera restore/persist behavior
+- `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`: deterministic shader contract text generation
 - `app/db/client-bridge/bridge.ts`: main-thread persistence entry point
 - `app/db/worker/worker.ts`: worker runtime and request handling
 - `app/db/worker/sqlite-repository.ts`: schema and SQL operations

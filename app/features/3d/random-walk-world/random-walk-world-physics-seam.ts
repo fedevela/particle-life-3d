@@ -8,7 +8,7 @@ import type {
 /** Issue #32 architecture seam mapping: CH-001, CH-003. */
 export const ISSUE_32_RANDOM_WALK_PHYSICS_SEAM = {
   requirementIds: ["CH-001", "CH-003"] as const,
-  owner: "app/features/3d/random-walk-world-physics-seam.ts",
+  owner: "app/features/3d/random-walk-world/random-walk-world-physics-seam.ts",
 } as const;
 
 export type RandomWalkSimulationHandle = {

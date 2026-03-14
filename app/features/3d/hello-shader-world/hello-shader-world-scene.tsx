@@ -3,13 +3,13 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import fragmentShader from "~/features/3d/shaders/hello-shader-world.frag";
-import vertexShader from "~/features/3d/shaders/hello-shader-world.vert";
+import fragmentShader from "~/features/3d/hello-shader-world/shaders/hello-shader-world.frag";
+import vertexShader from "~/features/3d/hello-shader-world/shaders/hello-shader-world.vert";
 import {
   HelloShaderWorldSimulation,
   SHADER_PARTICLE_CAPACITY,
   SHADER_TEXTURE_SIZE,
-} from "~/features/3d/hello-shader-world-simulation";
+} from "~/features/3d/hello-shader-world/hello-shader-world-simulation";
 import { createLogger } from "~/lib/logger";
 import { useUiStore } from "~/state/ui-store";
 

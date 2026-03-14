@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { CAMERA_ACTIONS, type CameraAction } from "../app/features/3d/camera-actions";
+import { CAMERA_ACTIONS, type CameraAction } from "../../app/features/3d/hello-world/camera-actions";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

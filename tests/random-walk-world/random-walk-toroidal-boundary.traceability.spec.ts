@@ -14,11 +14,11 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
     id: "CH-001",
     obligation:
       "Selecting the third left menu option exposes a random-walk WebGL dot-cloud view with label and parameter controls.",
-    verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
-    pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-toroidal-boundary.traceability.spec.ts",
+    pseudocodeLocus: "app/features/3d/random-walk-world/random-walk-toroidal-boundary.pseudocode.ts",
     architectureLoci: [
       "app/routes/random-walk-world.tsx",
-      "app/features/3d/random-walk-world-page.tsx",
+      "app/features/3d/random-walk-world/random-walk-world-page.tsx",
       "app/state/ui-store.ts",
       "app/routes/dashboard-shell.tsx",
       "app/types/random-walk-world.ts",
@@ -33,12 +33,12 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
     id: "CH-003",
     obligation:
       "Dot transitions across invisible cube boundaries wrap to opposite side while preserving velocity in toroidal space.",
-    verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
-    pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-toroidal-boundary.traceability.spec.ts",
+    pseudocodeLocus: "app/features/3d/random-walk-world/random-walk-toroidal-boundary.pseudocode.ts",
     architectureLoci: [
-      "app/features/3d/random-walk-world-physics-seam.ts",
+      "app/features/3d/random-walk-world/random-walk-world-physics-seam.ts",
       "app/types/random-walk-world.ts",
-      "app/features/3d/random-walk-world-page.tsx",
+      "app/features/3d/random-walk-world/random-walk-world-page.tsx",
     ],
     cases: [
       "toroidal-boundary.positive-axis.crossing.wraps-to-opposite-side",

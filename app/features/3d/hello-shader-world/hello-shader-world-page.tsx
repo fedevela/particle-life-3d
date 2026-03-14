@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   HelloShaderWorldScene,
   type ShaderWorldTestApi,
-} from "~/features/3d/hello-shader-world-scene";
+} from "~/features/3d/hello-shader-world/hello-shader-world-scene";
 
 declare global {
   interface Window {
