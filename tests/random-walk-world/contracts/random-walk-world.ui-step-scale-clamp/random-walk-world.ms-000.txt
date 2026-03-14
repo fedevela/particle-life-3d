@@ -1,0 +1,14 @@
+[random-walk]
+frame=0
+dot_count=2048
+step_scale=0.1000
+boundary_extent=2.5000
+avg_x=-0.0255
+avg_y=0.0075
+avg_z=0.0058
+avg_speed=0.0957
+max_radius=3.3593
+sample_0=0.1783,0.9010,-0.6270,-0.0530,-0.0607,0.0078
+sample_1=-1.6999,1.0328,-0.8214,-0.0638,0.0210,-0.0776
+sample_2=0.9763,-1.6974,-1.3427,0.0931,0.0106,-0.0189
+checksum=d9dcef65
