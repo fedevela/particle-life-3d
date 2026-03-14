@@ -348,33 +348,39 @@ export default function DashboardShell() {
                         ))}
                       </select>
                     </div>
-                    {RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER.map((key) => {
-                      const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
-                      return (
-                        <div key={key} className="space-y-1">
-                          <label
-                            className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                            htmlFor={`random-walk-world-${key}`}
-                            title={control.tooltip}
-                          >
-                            {control.label}
-                          </label>
-                          <input
-                            id={`random-walk-world-${key}`}
-                            type="number"
-                            inputMode="decimal"
-                            min={control.min}
-                            max={control.max}
-                            step={control.step}
-                            title={control.tooltip}
-                            value={getRandomWalkPhysicsInputValue(key, randomWalkWorldPhysicsParams[key])}
-                            onChange={(event) => setRandomWalkWorldPhysicsParam(key, event.target.value)}
-                            onWheel={(event) => handleRandomWalkPhysicsWheel(key, event)}
-                            className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                          />
-                        </div>
-                      );
-                    })}
+                    {randomWalkWorldPhysicsParams.mode === "peer-influenced-random-walk" ? (
+                      RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER.map((key) => {
+                        const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
+                        return (
+                          <div key={key} className="space-y-1">
+                            <label
+                              className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                              htmlFor={`random-walk-world-${key}`}
+                              title={control.tooltip}
+                            >
+                              {control.label}
+                            </label>
+                            <input
+                              id={`random-walk-world-${key}`}
+                              type="number"
+                              inputMode="decimal"
+                              min={control.min}
+                              max={control.max}
+                              step={control.step}
+                              title={control.tooltip}
+                              value={getRandomWalkPhysicsInputValue(key, randomWalkWorldPhysicsParams[key])}
+                              onChange={(event) => setRandomWalkWorldPhysicsParam(key, event.target.value)}
+                              onWheel={(event) => handleRandomWalkPhysicsWheel(key, event)}
+                              className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                            />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-cyan-300/90">
+                        Peer controls hidden in regular mode.
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : null}

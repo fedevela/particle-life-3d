@@ -189,6 +189,23 @@ test("wheel respects min and max clamps", async ({ page }) => {
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
 
+test("peer influence controls are toggle-gated and expose peer impulse scale", async ({ page }) => {
+  await openRandomWalkControls(page, "random-walk-peer-controls-toggle");
+
+  const modeSelect = page.locator("#random-walk-world-mode");
+  await expect(modeSelect).toBeVisible();
+  await expect(modeSelect).toHaveValue("regular-random-walk");
+  await expect(page.locator("#random-walk-world-peerImpulseScale")).toHaveCount(0);
+
+  await modeSelect.selectOption("peer-influenced-random-walk");
+  const peerImpulseScaleInput = page.locator("#random-walk-world-peerImpulseScale");
+  await expect(peerImpulseScaleInput).toBeVisible();
+  await expect(peerImpulseScaleInput).toHaveValue("0.15");
+
+  await peerImpulseScaleInput.fill("0.22");
+  await expect(peerImpulseScaleInput).toHaveValue("0.22");
+});
+
 test("toroidal wrap preserves velocity vector", async () => {
   const port = createRandomWalkToroidalPhysicsPort();
   const boundary = {

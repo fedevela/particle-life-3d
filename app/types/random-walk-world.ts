@@ -25,7 +25,8 @@ export type RandomWalkWorldPhysicsParamKey =
   | "ambientFriction"
   | "peerInfluenceRadius"
   | "velocityBiasWeight"
-  | "peerBiasWeight";
+  | "peerBiasWeight"
+  | "peerImpulseScale";
 
 export type RandomWalkWorldPhysicsParams = {
   mode: RandomWalkPhysicsMode;
@@ -50,6 +51,7 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER: readonly RandomWalkWorldPhys
   "peerInfluenceRadius",
   "velocityBiasWeight",
   "peerBiasWeight",
+  "peerImpulseScale",
 ] as const;
 
 export const RANDOM_WALK_WORLD_PARAM_CONTROLS: Record<RandomWalkWorldParamKey, RandomWalkWorldParamControl> = {
@@ -119,6 +121,13 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
     step: 0.01,
     tooltip: "Weight for peer-average direction when deriving dual-bias impulses.",
   },
+  peerImpulseScale: {
+    label: "Peer Impulse Scale",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    tooltip: "Scale applied to peer-influenced impulse integration each frame.",
+  },
 };
 
 export const DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS: RandomWalkWorldPhysicsParams = {
@@ -127,6 +136,7 @@ export const DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS: RandomWalkWorldPhysicsPar
   peerInfluenceRadius: 1.2,
   velocityBiasWeight: 0.5,
   peerBiasWeight: 0.5,
+  peerImpulseScale: 0.15,
 };
 
 /** Clamp UI-provided random-walk control values to declared bounds (CH-001 integration seam). */
@@ -169,6 +179,10 @@ export function clampRandomWalkWorldPhysicsParams(
     peerBiasWeight: Math.min(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerBiasWeight.max,
       Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerBiasWeight.min, params.peerBiasWeight),
+    ),
+    peerImpulseScale: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerImpulseScale.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerImpulseScale.min, params.peerImpulseScale),
     ),
   };
 }

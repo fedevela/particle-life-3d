@@ -12,7 +12,7 @@ import {
 const RANDOM_WALK_FIXED_FPS = 60;
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / RANDOM_WALK_FIXED_FPS;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
-const IMPULSE_SCALE_FACTOR = 0.15;
+const REGULAR_IMPULSE_SCALE_FACTOR = 0.15;
 
 function normalizeDirection(x: number, y: number, z: number): [number, number, number] {
   const length = Math.hypot(x, y, z);
@@ -135,9 +135,9 @@ export class RandomWalkWorldSimulation {
       let vz = this.velocities[offset + 2];
 
       if (framePlan.mode === "regular-random-walk") {
-        vx += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
-        vy += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
-        vz += this.nextSignedRandom() * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vx += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
+        vy += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
+        vz += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
       } else {
         const friction = this.peerInfluencePort.deriveAmbientFrictionDecayPlan({
           velocity: [vx, vy, vz],
@@ -166,9 +166,9 @@ export class RandomWalkWorldSimulation {
           peerBiasWeight: this.physicsParams.peerBiasWeight,
         });
 
-        vx += impulseDirection.biasedDirection[0] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
-        vy += impulseDirection.biasedDirection[1] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
-        vz += impulseDirection.biasedDirection[2] * this.params.stepScale * IMPULSE_SCALE_FACTOR;
+        vx += impulseDirection.biasedDirection[0] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+        vy += impulseDirection.biasedDirection[1] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+        vz += impulseDirection.biasedDirection[2] * this.params.stepScale * this.physicsParams.peerImpulseScale;
       }
 
       const speed = Math.hypot(vx, vy, vz);

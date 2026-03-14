@@ -70,6 +70,7 @@ test.describe("Issue #33 phase 8 implementation traceability", () => {
         peerInfluenceRadius: 1.2,
         velocityBiasWeight: 0.5,
         peerBiasWeight: 0.5,
+        peerImpulseScale: 0.15,
       },
     );
     const peerInfluenced = new RandomWalkWorldSimulation(
@@ -82,6 +83,7 @@ test.describe("Issue #33 phase 8 implementation traceability", () => {
         peerInfluenceRadius: 1.2,
         velocityBiasWeight: 0.5,
         peerBiasWeight: 0.5,
+        peerImpulseScale: 0.15,
       },
     );
 
