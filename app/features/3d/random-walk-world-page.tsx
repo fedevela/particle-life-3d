@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { useFrame } from "@react-three/fiber";
+import { OrbitControls } from "@react-three/drei";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -21,8 +22,11 @@ export function RandomWalkWorldPage() {
   return (
     <section className="h-full w-full">
       <Canvas camera={{ position: [0, 0, 6], fov: 55 }}>
+        <color attach="background" args={["#020617"]} />
         <ambientLight intensity={0.75} />
+        <gridHelper args={[18, 18, "#164e63", "#0f172a"]} />
         <RandomWalkDotCloud params={params} />
+        <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
       </Canvas>
     </section>
   );
@@ -31,12 +35,13 @@ export function RandomWalkWorldPage() {
 function createInitialState(params: RandomWalkWorldParams) {
   const positions = new Float32Array(params.dotCount * 3);
   const velocities = new Float32Array(params.dotCount * 3);
+  const spawnExtent = params.boundaryExtent * 0.8;
 
   for (let index = 0; index < params.dotCount; index += 1) {
     const offset = index * 3;
-    positions[offset] = (Math.random() * 2 - 1) * params.boundaryExtent;
-    positions[offset + 1] = (Math.random() * 2 - 1) * params.boundaryExtent;
-    positions[offset + 2] = (Math.random() * 2 - 1) * params.boundaryExtent;
+    positions[offset] = (Math.random() * 2 - 1) * spawnExtent;
+    positions[offset + 1] = (Math.random() * 2 - 1) * spawnExtent;
+    positions[offset + 2] = (Math.random() * 2 - 1) * spawnExtent;
 
     velocities[offset] = (Math.random() * 2 - 1) * params.stepScale;
     velocities[offset + 1] = (Math.random() * 2 - 1) * params.stepScale;
@@ -134,11 +139,11 @@ function RandomWalkDotCloud({ params }: RandomWalkDotCloudProps) {
   });
 
   return (
-    <points>
+    <points frustumCulled={false}>
       <bufferGeometry ref={geometryRef}>
         <bufferAttribute attach="attributes-position" args={[state.positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial color="#34d399" size={0.03} sizeAttenuation />
+      <pointsMaterial color="#34d399" size={0.07} sizeAttenuation depthWrite={false} />
     </points>
   );
 }
