@@ -17,9 +17,10 @@ async function waitForRandomWalkTestApis(page: Page) {
     .poll(async () => {
       return page.evaluate(() => ({
         hasGetContract: typeof window.__GET_RANDOM_WALK_CONTRACT_TEXT__ === "function",
+        hasReset: typeof window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ === "function",
       }));
     }, { timeout: 15_000, intervals: [100, 250, 500] })
-    .toEqual({ hasGetContract: true });
+    .toEqual({ hasGetContract: true, hasReset: true });
 }
 
 async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
@@ -47,6 +48,27 @@ async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
   }
 
   throw new Error("Failed to read random walk contract text after retries.");
+}
+
+async function resetRandomWalkSimulation(page: Page) {
+  await page.evaluate(async () => {
+    if (typeof window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ !== "function") {
+      throw new Error("window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ is not available.");
+    }
+    await window.__RESET_RANDOM_WALK_SIM_FOR_TEST__();
+  });
+}
+
+function parseContractMetric(contractText: string, key: string) {
+  const line = contractText
+    .split("\n")
+    .find((entry) => entry.startsWith(`${key}=`));
+  if (!line) {
+    throw new Error(`Contract key "${key}" is missing.`);
+  }
+
+  const [, rawValue] = line.split("=");
+  return Number.parseFloat(rawValue);
 }
 
 async function wheelInput(input: Locator, deltaY: number) {
@@ -232,6 +254,51 @@ test("peer influence controls are toggle-gated and expose peer impulse scale", a
   await peerImpulseScaleInput.fill("0.22");
   await expect(peerImpulseScaleInput).toHaveValue("0.22");
   await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("push_strength=0.2200");
+});
+
+test("deterministic seed input reproduces identical contracts for same value and changes when value changes", async ({
+  page,
+}) => {
+  await openRandomWalkControls(page, "random-walk-seed-controls");
+
+  const seedInput = page.locator("#random-walk-world-seed");
+  await seedInput.fill("issue-34-seed-a");
+  await expect(seedInput).toHaveValue("issue-34-seed-a");
+
+  const seedAAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  await seedInput.fill("issue-34-seed-b");
+  await expect(seedInput).toHaveValue("issue-34-seed-b");
+  const seedBAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  expect(seedBAt216).not.toBe(seedAAt216);
+
+  await seedInput.fill("issue-34-seed-a");
+  await expect(seedInput).toHaveValue("issue-34-seed-a");
+  const seedAReplayAt216 = (await getRandomWalkContractAtTimeMs(page, 216)).trimEnd();
+  expect(seedAReplayAt216).toBe(seedAAt216);
+});
+
+test("ambient friction updates on next frame and increases halting trend when raised", async ({ page }) => {
+  await openRandomWalkControls(page, "random-walk-friction-controls");
+
+  const modeSelect = page.locator("#random-walk-world-mode");
+  await modeSelect.selectOption("peer-influenced-random-walk");
+  await expect(modeSelect).toHaveValue("peer-influenced-random-walk");
+
+  const frictionInput = page.locator("#random-walk-world-ambientFriction");
+  await frictionInput.fill("0.00");
+  await expect(frictionInput).toHaveValue("0.00");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("ambient_friction=0.0000");
+  const lowFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+
+  await frictionInput.fill("0.90");
+  await expect(frictionInput).toHaveValue("0.90");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("ambient_friction=0.9000");
+  const highFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+  expect(highFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
+
+  await resetRandomWalkSimulation(page);
+  const postResetHighFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
+  expect(postResetHighFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
 });
 
 test("toroidal wrap preserves velocity vector", async () => {

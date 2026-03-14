@@ -231,3 +231,86 @@ export type DeriveRealtimePhysicsPropagationPlan = (
 ) => RealtimePhysicsPropagationOutput;
 export type DeriveCameraContinuityGuardPlan = (input: CameraContinuityInput) => CameraContinuityOutput;
 export type DeriveSmoothFrameProgressionPlan = (input: FrameProgressionInput) => FrameProgressionOutput;
+
+export const deriveSeedResetPlan: DeriveSeedResetPlan = (input) => {
+  const shouldResetSimulation = input.requestedSeed !== input.previousSeed;
+  return {
+    shouldResetSimulation,
+    orderedSteps: [
+      "resolve-seed-change",
+      "rehash-seed-state",
+      "reinitialize-dot-positions-and-velocities",
+      "capture-contract-frame-zero",
+    ],
+    obligationsSatisfied: ["CH-002"],
+  };
+};
+
+export const deriveFrictionHaltingPlan: DeriveFrictionHaltingPlan = (input) => {
+  const expectedHaltingTrend =
+    input.nextFriction > input.previousFriction
+      ? "halt-faster"
+      : input.nextFriction < input.previousFriction
+        ? "halt-slower"
+        : "no-change";
+  void input.postForceVelocityMagnitude;
+
+  return {
+    expectedHaltingTrend,
+    orderedSteps: [
+      "read-updated-friction-control",
+      "compute-next-frame-friction-decay",
+      "compare-post-force-residual-motion-window",
+      "record-halting-direction-obligation",
+    ],
+    obligationsSatisfied: ["CH-006", "CH-007"],
+  };
+};
+
+export const deriveRealtimePhysicsPropagationPlan: DeriveRealtimePhysicsPropagationPlan = (input) => {
+  const hasPendingUiPhysicsUpdate =
+    input.latestUiPhysicsParamsVersion > input.lastAppliedPhysicsParamsVersion;
+  return {
+    applyOnFrame: hasPendingUiPhysicsUpdate ? input.frameNumber : input.frameNumber + 1,
+    requiresSimulationReconstruction: false,
+    orderedSteps: [
+      "read-ui-physics-params-snapshot",
+      "derive-frame-plan-with-latest-params",
+      "apply-updated-params-to-frame-step",
+      "preserve-existing-position-and-velocity-state",
+    ],
+    obligationsSatisfied: ["CH-007"],
+  };
+};
+
+export const deriveCameraContinuityGuardPlan: DeriveCameraContinuityGuardPlan = (input) => {
+  const controlsChanged = input.controlsBoundBeforeEdit.join("|") !== input.controlsBoundAfterEdit.join("|");
+  return {
+    controlsChanged,
+    keepCenterLock: !input.userCameraMoveDetected,
+    orderedSteps: [
+      "capture-control-bindings-before-parameter-edit",
+      "apply-parameter-edit-without-rebinding-controls",
+      "assert-bindings-match-pre-edit-state",
+      "honor-user-driven-camera-movement-only",
+    ],
+    obligationsSatisfied: ["CH-009"],
+  };
+};
+
+export const deriveSmoothFrameProgressionPlan: DeriveSmoothFrameProgressionPlan = (input) => {
+  const speedDelta = Math.abs(input.nextVelocityMagnitude - input.previousVelocityMagnitude);
+  const jitterRisk = speedDelta < 0.25 ? "low" : speedDelta < 0.75 ? "medium" : "high";
+
+  return {
+    jitterRisk,
+    teleportRisk: input.wrapOccurred ? "guarded" : "none",
+    orderedSteps: [
+      "step-with-fixed-frame-duration",
+      "apply-bounded-velocity-clamp",
+      "integrate-toroidal-wrap-transition",
+      "capture-deterministic-contract-frame",
+    ],
+    obligationsSatisfied: ["CH-010"],
+  };
+};

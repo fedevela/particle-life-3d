@@ -11,6 +11,13 @@ import type {
   SeedControlInput,
   SeedControlPlan,
 } from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.contracts";
+import {
+  deriveCameraContinuityGuardPlan,
+  deriveFrictionHaltingPlan,
+  deriveRealtimePhysicsPropagationPlan as deriveRealtimePhysicsPropagationPseudocodePlan,
+  deriveSeedResetPlan,
+  deriveSmoothFrameProgressionPlan,
+} from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.pseudocode";
 
 export * from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.contracts";
 
@@ -25,20 +32,25 @@ const ISSUE_34_PARAMETER_CONTROLS_ARCHITECTURE_REQUIREMENTS = [
 
 function deriveSeedControlPlan(input: SeedControlInput): SeedControlPlan {
   const normalizedUiSeed = input.uiSeedInput.trim();
+  if (normalizedUiSeed.length > 0) {
+    const seedResetPlan = deriveSeedResetPlan({
+      requestedSeed: normalizedUiSeed,
+      previousSeed: input.querySeed && input.querySeed.length > 0 ? input.querySeed : input.sessionSeed,
+      currentFrame: 0,
+    });
+    return {
+      effectiveSeed: normalizedUiSeed,
+      seedSource: "ui-control",
+      shouldResetSimulation: seedResetPlan.shouldResetSimulation,
+      obligationsSatisfied: ["CH-002"],
+    };
+  }
+
   if (input.querySeed && input.querySeed.length > 0) {
     return {
       effectiveSeed: input.querySeed,
       seedSource: "query-param",
       shouldResetSimulation: false,
-      obligationsSatisfied: ["CH-002"],
-    };
-  }
-
-  if (normalizedUiSeed.length > 0) {
-    return {
-      effectiveSeed: normalizedUiSeed,
-      seedSource: "ui-control",
-      shouldResetSimulation: normalizedUiSeed !== input.sessionSeed,
       obligationsSatisfied: ["CH-002"],
     };
   }
@@ -54,10 +66,15 @@ function deriveSeedControlPlan(input: SeedControlInput): SeedControlPlan {
 function deriveFrictionHaltingOwnershipPlan(
   input: FrictionHaltingOwnershipInput,
 ): FrictionHaltingOwnershipPlan {
+  const frictionHaltingPlan = deriveFrictionHaltingPlan({
+    previousFriction: input.ambientFriction,
+    nextFriction: input.ambientFriction,
+    postForceVelocityMagnitude: input.peerImpulseScale,
+  });
   return {
     owner: "simulation-frame-step",
     normalizedFrictionFactor: Math.min(1, Math.max(0, input.ambientFriction)),
-    preservesImpulseOwnership: input.peerImpulseScale >= 0,
+    preservesImpulseOwnership: input.peerImpulseScale >= 0 && frictionHaltingPlan.expectedHaltingTrend === "no-change",
     obligationsSatisfied: ["CH-006"],
   };
 }
@@ -65,10 +82,14 @@ function deriveFrictionHaltingOwnershipPlan(
 function deriveRealtimePhysicsPropagationPlan(
   input: RealtimePhysicsPropagationInput,
 ): RealtimePhysicsPropagationPlan {
-  const shouldApplyOnCurrentFrame =
-    input.latestUiPhysicsParamsVersion > input.lastAppliedPhysicsParamsVersion;
+  const propagationPlan = deriveRealtimePhysicsPropagationPseudocodePlan({
+    latestUiPhysicsParamsVersion: input.latestUiPhysicsParamsVersion,
+    lastAppliedPhysicsParamsVersion: input.lastAppliedPhysicsParamsVersion,
+    frameNumber: input.frameNumber,
+  });
+  const shouldApplyOnCurrentFrame = propagationPlan.applyOnFrame === input.frameNumber;
   return {
-    applyOnFrame: shouldApplyOnCurrentFrame ? input.frameNumber : input.frameNumber + 1,
+    applyOnFrame: propagationPlan.applyOnFrame,
     shouldApplyOnCurrentFrame,
     requiresSimulationReconstruction: false,
     obligationsSatisfied: ["CH-007"],
@@ -76,22 +97,27 @@ function deriveRealtimePhysicsPropagationPlan(
 }
 
 function deriveCameraContinuityPlan(input: CameraContinuityInput): CameraContinuityPlan {
-  const controlsChanged = input.controlsBoundBeforeEdit.join("|") !== input.controlsBoundAfterEdit.join("|");
+  const guardPlan = deriveCameraContinuityGuardPlan(input);
   return {
-    controlsChanged,
-    preserveDefaultOrbitBindings: !controlsChanged,
-    keepCenterLock: !input.userCameraMoveDetected,
+    controlsChanged: guardPlan.controlsChanged,
+    preserveDefaultOrbitBindings: !guardPlan.controlsChanged,
+    keepCenterLock: guardPlan.keepCenterLock,
     obligationsSatisfied: ["CH-009"],
   };
 }
 
 function deriveFrameProgressionPlan(input: FrameProgressionInput): FrameProgressionPlan {
+  const progressionPlan = deriveSmoothFrameProgressionPlan({
+    frameDurationMs: input.frameDurationMs,
+    previousVelocityMagnitude: input.previousAverageSpeed,
+    nextVelocityMagnitude: input.nextAverageSpeed,
+    wrapOccurred: input.wrapOccurred,
+  });
   const velocityDelta = Math.abs(input.nextAverageSpeed - input.previousAverageSpeed);
-  const jitterRisk = velocityDelta < 0.25 ? "low" : velocityDelta < 0.75 ? "medium" : "high";
   return {
     velocityDelta,
-    jitterRisk,
-    teleportRisk: input.wrapOccurred ? "guarded" : "none",
+    jitterRisk: progressionPlan.jitterRisk,
+    teleportRisk: progressionPlan.teleportRisk,
     obligationsSatisfied: ["CH-010"],
   };
 }

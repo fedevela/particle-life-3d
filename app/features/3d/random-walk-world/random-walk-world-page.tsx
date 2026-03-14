@@ -15,6 +15,8 @@ const ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-001", "CH-003"] as const;
 const ISSUE_33_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-004", "CH-005", "CH-005-A", "CH-008"] as const;
 /** Issue #34 architecture placement mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
 const ISSUE_34_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"] as const;
+const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
+const MAX_STEPS_PER_RENDER = 5;
 
 declare global {
   interface Window {
@@ -92,11 +94,16 @@ type RandomWalkDotCloudProps = {
 function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomWalkDotCloudProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
   const simulationRef = useRef<RandomWalkWorldSimulation | null>(null);
+  const frameAccumulatorMsRef = useRef(0);
   const simulation = useMemo(
     () => new RandomWalkWorldSimulation(params, seed, isTestMode, physicsParams),
     [params, seed, isTestMode],
   );
   simulationRef.current = simulation;
+
+  useEffect(() => {
+    frameAccumulatorMsRef.current = 0;
+  }, [simulation]);
 
   useEffect(() => {
     simulationRef.current?.setPhysicsParams(physicsParams);
@@ -126,7 +133,7 @@ function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomW
     };
   }, [isTestMode, simulation]);
 
-  useFrame(() => {
+  useFrame((_, deltaSeconds) => {
     const geometry = geometryRef.current;
     if (!geometry) {
       return;
@@ -137,8 +144,22 @@ function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomW
       return;
     }
 
-    simulation.stepFrame();
-    positionAttribute.needsUpdate = true;
+    frameAccumulatorMsRef.current += Math.min(deltaSeconds * 1000, RANDOM_WALK_FRAME_DURATION_MS * MAX_STEPS_PER_RENDER);
+    let stepped = false;
+    let steps = 0;
+    while (
+      frameAccumulatorMsRef.current >= RANDOM_WALK_FRAME_DURATION_MS &&
+      steps < MAX_STEPS_PER_RENDER
+    ) {
+      simulation.stepFrame();
+      frameAccumulatorMsRef.current -= RANDOM_WALK_FRAME_DURATION_MS;
+      steps += 1;
+      stepped = true;
+    }
+
+    if (stepped) {
+      positionAttribute.needsUpdate = true;
+    }
   });
 
   return (
