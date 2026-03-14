@@ -17,7 +17,7 @@ import { useUiStore } from "~/state/ui-store";
 const logger = createLogger("hello-shader-world-scene");
 
 /** Define test-only APIs exposed from this scene to the route page wrapper. */
-export type ShaderWorldTestApi = {
+export type ShaderContractTestHarnessApi = {
   getCurrentFrame: () => number;
   getShaderContractText: (frame?: number) => string;
   resetSimulation: () => void;
@@ -26,7 +26,7 @@ export type ShaderWorldTestApi = {
 /** Define scene props used by runtime/test wiring. */
 type HelloShaderWorldSceneProps = {
   seed: string;
-  onTestApiReady?: (api: ShaderWorldTestApi | null) => void;
+  onTestApiReady?: (api: ShaderContractTestHarnessApi | null) => void;
 };
 
 /** Create the static position attribute expected by Three Points geometry. */
@@ -49,27 +49,27 @@ function createReferenceAttribute() {
 }
 
 function createActiveAttribute() {
-  const active = new Float32Array(SHADER_PARTICLE_CAPACITY);
-  active[0] = 1;
-  return new THREE.BufferAttribute(active, 1);
+  const activeParticleMask = new Float32Array(SHADER_PARTICLE_CAPACITY);
+  activeParticleMask[0] = 1;
+  return new THREE.BufferAttribute(activeParticleMask, 1);
 }
 
 export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorldSceneProps) {
   const { gl } = useThree();
-  const canRenderSimulation = gl.capabilities.maxVertexTextures > 0;
-  const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
+  const supportsVertexTextureSampling = gl.capabilities.maxVertexTextures > 0;
+  const shaderSimulationRef = useRef<HelloShaderWorldSimulation | null>(null);
   const helloShaderWorldActionQueue = useUiStore((state) => state.helloShaderWorldActionQueue);
   const dequeueHelloShaderWorldAction = useUiStore((state) => state.dequeueHelloShaderWorldAction);
   const movementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
 
   const [error, setError] = useState<Error | null>(null);
-  const [isSimulationReady, setIsSimulationReady] = useState(false);
+  const [isShaderSimulationReady, setIsShaderSimulationReady] = useState(false);
 
-  const positionAttribute = useMemo(() => createPositionAttribute(), []);
-  const referenceAttribute = useMemo(() => createReferenceAttribute(), []);
-  const activeAttribute = useMemo(() => createActiveAttribute(), []);
+  const particlePositionAttribute = useMemo(() => createPositionAttribute(), []);
+  const particleReferenceAttribute = useMemo(() => createReferenceAttribute(), []);
+  const activeParticleAttribute = useMemo(() => createActiveAttribute(), []);
 
-  const uniforms = useMemo(
+  const particleRenderUniforms = useMemo(
     () => ({
       uState: { value: null as THREE.Texture | null },
       uColorA: { value: new THREE.Color("#22d3ee") },
@@ -83,11 +83,11 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
 
   useEffect(() => {
     try {
-      const simulation = new HelloShaderWorldSimulation(gl, seed);
-      simulation.setMovementParams(movementParams);
-      simulationRef.current = simulation;
-      uniforms.uState.value = simulation.getStateTexture();
-      setIsSimulationReady(true);
+      const initializedSimulation = new HelloShaderWorldSimulation(gl, seed);
+      initializedSimulation.setMovementParams(movementParams);
+      shaderSimulationRef.current = initializedSimulation;
+      particleRenderUniforms.uState.value = initializedSimulation.getStateTexture();
+      setIsShaderSimulationReady(true);
     } catch (initializationError: unknown) {
       setError(
         initializationError instanceof Error
@@ -97,106 +97,116 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
     }
 
     return () => {
-      simulationRef.current?.dispose();
-      simulationRef.current = null;
-      uniforms.uState.value = null;
-      setIsSimulationReady(false);
+      shaderSimulationRef.current?.dispose();
+      shaderSimulationRef.current = null;
+      particleRenderUniforms.uState.value = null;
+      setIsShaderSimulationReady(false);
     };
-  }, [gl, seed, uniforms]);
+  }, [gl, particleRenderUniforms, seed]);
 
   useEffect(() => {
-    const simulation = simulationRef.current;
-    if (!simulation) {
+    const shaderSimulation = shaderSimulationRef.current;
+    if (!shaderSimulation) {
       return;
     }
 
-    simulation.setMovementParams(movementParams);
+    shaderSimulation.setMovementParams(movementParams);
   }, [movementParams]);
 
   useEffect(() => {
-    if (!onTestApiReady || !isSimulationReady) {
+    if (!onTestApiReady || !isShaderSimulationReady) {
       return;
     }
 
     onTestApiReady({
-      getCurrentFrame: () => simulationRef.current?.getCurrentFrame() ?? 0,
+      getCurrentFrame: () => shaderSimulationRef.current?.getCurrentFrame() ?? 0,
       getShaderContractText: (frame) => {
-        const simulation = simulationRef.current;
-        if (!simulation) {
+        const shaderSimulation = shaderSimulationRef.current;
+        if (!shaderSimulation) {
           throw new Error("Shader simulation is not ready yet.");
         }
 
-        return simulation.getShaderContractText(frame);
+        return shaderSimulation.getShaderContractText(frame);
       },
       resetSimulation: () => {
-        const simulation = simulationRef.current;
-        if (!simulation) {
+        const shaderSimulation = shaderSimulationRef.current;
+        if (!shaderSimulation) {
           throw new Error("Shader simulation is not ready yet.");
         }
 
-        simulation.reset();
-        activeAttribute.array.fill(0);
-        activeAttribute.array[0] = 1;
-        activeAttribute.needsUpdate = true;
-        uniforms.uState.value = simulation.getStateTexture();
+        shaderSimulation.reset();
+        activeParticleAttribute.array.fill(0);
+        activeParticleAttribute.array[0] = 1;
+        activeParticleAttribute.needsUpdate = true;
+        particleRenderUniforms.uState.value = shaderSimulation.getStateTexture();
       },
     });
 
     return () => {
       onTestApiReady(null);
     };
-  }, [activeAttribute, isSimulationReady, onTestApiReady, uniforms]);
+  }, [activeParticleAttribute, isShaderSimulationReady, onTestApiReady, particleRenderUniforms]);
 
   useEffect(() => {
-    const simulation = simulationRef.current;
-    const pendingAction = helloShaderWorldActionQueue[0];
-    if (!isSimulationReady || !simulation || !pendingAction) {
+    const shaderSimulation = shaderSimulationRef.current;
+    const pendingParticleAction = helloShaderWorldActionQueue[0];
+    if (!isShaderSimulationReady || !shaderSimulation || !pendingParticleAction) {
       return;
     }
 
-    if (pendingAction.type === "add") {
-      const addedIndexes = simulation.addParticles(pendingAction.amount);
-      for (const index of addedIndexes) {
-        activeAttribute.array[index] = 1;
+    if (pendingParticleAction.type === "add") {
+      const addedParticleIds = shaderSimulation.addParticles(pendingParticleAction.amount);
+      for (const particleId of addedParticleIds) {
+        activeParticleAttribute.array[particleId] = 1;
       }
-      activeAttribute.needsUpdate = true;
+      activeParticleAttribute.needsUpdate = true;
     } else {
-      const removedIndexes = simulation.removeParticles(pendingAction.amount);
-      for (const index of removedIndexes) {
-        activeAttribute.array[index] = 0;
+      const removedParticleIds = shaderSimulation.removeParticles(pendingParticleAction.amount);
+      for (const particleId of removedParticleIds) {
+        activeParticleAttribute.array[particleId] = 0;
       }
-      activeAttribute.needsUpdate = true;
+      activeParticleAttribute.needsUpdate = true;
     }
 
-    uniforms.uState.value = simulation.getStateTexture();
+    particleRenderUniforms.uState.value = shaderSimulation.getStateTexture();
     dequeueHelloShaderWorldAction();
-  }, [activeAttribute, dequeueHelloShaderWorldAction, helloShaderWorldActionQueue, isSimulationReady, uniforms]);
+  }, [
+    activeParticleAttribute,
+    dequeueHelloShaderWorldAction,
+    helloShaderWorldActionQueue,
+    isShaderSimulationReady,
+    particleRenderUniforms,
+  ]);
 
   useFrame(() => {
-    const simulation = simulationRef.current;
-    if (!simulation) {
+    const shaderSimulation = shaderSimulationRef.current;
+    if (!shaderSimulation) {
       return;
     }
 
-    const milestone = simulation.step();
-    uniforms.uState.value = simulation.getStateTexture();
+    const publishedMilestone = shaderSimulation.step();
+    particleRenderUniforms.uState.value = shaderSimulation.getStateTexture();
 
-    if (milestone) {
-      logger.debug("Publish shader milestone.", { frame: milestone.frame });
+    if (publishedMilestone) {
+      logger.debug("Publish shader milestone.", { frame: publishedMilestone.frame });
     }
   });
 
   return (
     <>
       <gridHelper args={[12, 12, "#d97706", "#1f2937"]} />
-      {canRenderSimulation ? (
+      {supportsVertexTextureSampling ? (
         <points>
           <bufferGeometry>
-            <primitive attach="attributes-position" object={positionAttribute} />
-            <primitive attach="attributes-aReference" object={referenceAttribute} />
-            <primitive attach="attributes-aActive" object={activeAttribute} />
+            <primitive attach="attributes-position" object={particlePositionAttribute} />
+            <primitive attach="attributes-aReference" object={particleReferenceAttribute} />
+            <primitive attach="attributes-aActive" object={activeParticleAttribute} />
           </bufferGeometry>
-          <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} />
+          <shaderMaterial
+            vertexShader={vertexShader}
+            fragmentShader={fragmentShader}
+            uniforms={particleRenderUniforms}
+          />
         </points>
       ) : null}
       <OrbitControls />

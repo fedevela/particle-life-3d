@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   HelloShaderWorldScene,
-  type ShaderWorldTestApi,
+  type ShaderContractTestHarnessApi,
 } from "~/features/3d/hello-shader-world/hello-shader-world-scene";
 
 declare global {
@@ -14,40 +14,40 @@ declare global {
   }
 }
 
-function resolvePageConfiguration() {
+function resolveShaderPageConfiguration() {
   if (typeof window === "undefined") {
     return {
-      isTestMode: false,
+      isContractTestMode: false,
       seed: null as string | null,
     };
   }
 
   const searchParams = new URLSearchParams(window.location.search);
   return {
-    isTestMode: searchParams.get("testMode") === "true",
+    isContractTestMode: searchParams.get("testMode") === "true",
     seed: searchParams.get("seed"),
   };
 }
 
 export function HelloShaderWorldPage() {
-  const { isTestMode, seed } = useMemo(() => resolvePageConfiguration(), []);
+  const { isContractTestMode, seed } = useMemo(() => resolveShaderPageConfiguration(), []);
   const sessionSeedRef = useRef<string>(seed ?? crypto.randomUUID());
-  const resolvedSeed = seed ?? sessionSeedRef.current;
-  const [testApi, setTestApi] = useState<ShaderWorldTestApi | null>(null);
+  const resolvedSessionSeed = seed ?? sessionSeedRef.current;
+  const [shaderContractHarnessApi, setShaderContractHarnessApi] = useState<ShaderContractTestHarnessApi | null>(null);
 
   useEffect(() => {
-    if (!isTestMode || !testApi) {
+    if (!isContractTestMode || !shaderContractHarnessApi) {
       return;
     }
 
     window.__GET_SHADER_CONTRACT_TEXT__ = async (frame) => {
-      return testApi.getShaderContractText(frame);
+      return shaderContractHarnessApi.getShaderContractText(frame);
     };
 
-    window.__GET_SHADER_FRAME__ = () => testApi.getCurrentFrame();
+    window.__GET_SHADER_FRAME__ = () => shaderContractHarnessApi.getCurrentFrame();
 
     window.__RESET_SHADER_SIM_FOR_TEST__ = async () => {
-      await testApi.resetSimulation();
+      await shaderContractHarnessApi.resetSimulation();
     };
 
     return () => {
@@ -55,14 +55,14 @@ export function HelloShaderWorldPage() {
       delete window.__GET_SHADER_FRAME__;
       delete window.__RESET_SHADER_SIM_FOR_TEST__;
     };
-  }, [isTestMode, testApi]);
+  }, [isContractTestMode, shaderContractHarnessApi]);
 
   return (
     <section className="h-full w-full">
       <Canvas camera={{ position: [0, 0, 5], fov: 55 }}>
         <HelloShaderWorldScene
-          seed={resolvedSeed}
-          onTestApiReady={setTestApi}
+          seed={resolvedSessionSeed}
+          onTestApiReady={setShaderContractHarnessApi}
         />
       </Canvas>
     </section>
