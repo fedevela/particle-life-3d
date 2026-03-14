@@ -1,32 +1,27 @@
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
-import type { RandomWalkWorldParams } from "~/types/random-walk-world";
+import {
+  createRandomWalkPhysicsArchitectureBindings,
+  type RandomWalkPeerInfluenceArchitecturePort,
+} from "~/features/3d/random-walk-world/random-walk-peer-influence.architecture";
+import { buildRandomWalkContractText } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-contract";
+import { hashSeed, nextRandomFromState } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-rng";
+import {
+  DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  type RandomWalkWorldPhysicsParams,
+  type RandomWalkWorldParams,
+} from "~/types/random-walk-world";
 
-const RANDOM_WALK_FIXED_FPS = 60;
-const RANDOM_WALK_FRAME_DURATION_MS = 1000 / RANDOM_WALK_FIXED_FPS;
+const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
+const REGULAR_IMPULSE_SCALE_FACTOR = 0.15;
 
-function hashSeed(seed: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+function normalizeDirection(x: number, y: number, z: number): [number, number, number] {
+  const length = Math.hypot(x, y, z);
+  if (!Number.isFinite(length) || length <= 1e-6) {
+    return [0, 0, 0];
   }
 
-  return hash >>> 0;
-}
-
-function hashString(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-function formatScalar(value: number) {
-  return value.toFixed(4);
+  return [x / length, y / length, z / length];
 }
 
 export function getRandomWalkFrameForTimeMs(timeMs: number) {
@@ -39,19 +34,28 @@ export function getRandomWalkFrameForTimeMs(timeMs: number) {
 
 export class RandomWalkWorldSimulation {
   private readonly params: RandomWalkWorldParams;
+  private readonly physicsParams: RandomWalkWorldPhysicsParams;
   private readonly seed: string;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly captureContractFrames: boolean;
   private readonly contractsByFrame = new Map<number, string>();
   private readonly physicsPort = createRandomWalkToroidalPhysicsPort();
+  private readonly peerInfluencePort: RandomWalkPeerInfluenceArchitecturePort;
   private rngState: number;
   private frame = 0;
 
-  constructor(params: RandomWalkWorldParams, seed: string, captureContractFrames = false) {
+  constructor(
+    params: RandomWalkWorldParams,
+    seed: string,
+    captureContractFrames = false,
+    physicsParams: RandomWalkWorldPhysicsParams = DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  ) {
     this.params = params;
+    this.physicsParams = physicsParams;
     this.seed = seed;
     this.captureContractFrames = captureContractFrames;
+    this.peerInfluencePort = createRandomWalkPhysicsArchitectureBindings(physicsParams).port;
     this.positions = new Float32Array(params.dotCount * 3);
     this.velocities = new Float32Array(params.dotCount * 3);
     this.rngState = hashSeed(seed);
@@ -68,11 +72,38 @@ export class RandomWalkWorldSimulation {
   }
 
   public stepFrame() {
+    const framePlan = this.peerInfluencePort.deriveFrameUpdatePlan({
+      mode: this.physicsParams.mode,
+      frictionFactor: this.physicsParams.ambientFriction,
+      peerRadius: this.physicsParams.peerInfluenceRadius,
+      velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+      peerBiasWeight: this.physicsParams.peerBiasWeight,
+    });
+
     const boundary = {
       min: [-this.params.boundaryExtent, -this.params.boundaryExtent, -this.params.boundaryExtent] as const,
       max: [this.params.boundaryExtent, this.params.boundaryExtent, this.params.boundaryExtent] as const,
     };
     const maxSpeed = this.params.stepScale * 3;
+    const frameDots =
+      framePlan.mode === "peer-influenced-random-walk"
+        ? Array.from({ length: this.params.dotCount }, (_, dotIndex) => {
+            const offset = dotIndex * 3;
+            return {
+              dotIndex,
+              position: [
+                this.positions[offset],
+                this.positions[offset + 1],
+                this.positions[offset + 2],
+              ] as const,
+              velocity: [
+                this.velocities[offset],
+                this.velocities[offset + 1],
+                this.velocities[offset + 2],
+              ] as const,
+            };
+          })
+        : null;
 
     for (let index = 0; index < this.params.dotCount; index += 1) {
       const offset = index * 3;
@@ -80,9 +111,42 @@ export class RandomWalkWorldSimulation {
       let vy = this.velocities[offset + 1];
       let vz = this.velocities[offset + 2];
 
-      vx += this.nextSignedRandom() * this.params.stepScale * 0.15;
-      vy += this.nextSignedRandom() * this.params.stepScale * 0.15;
-      vz += this.nextSignedRandom() * this.params.stepScale * 0.15;
+      if (framePlan.mode === "regular-random-walk") {
+        vx += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
+        vy += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
+        vz += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
+      } else {
+        const friction = this.peerInfluencePort.deriveAmbientFrictionDecayPlan({
+          velocity: [vx, vy, vz],
+          frictionFactor: this.physicsParams.ambientFriction,
+        });
+        vx = friction.decayedVelocity[0];
+        vy = friction.decayedVelocity[1];
+        vz = friction.decayedVelocity[2];
+
+        const velocityDirection = normalizeDirection(vx, vy, vz);
+        const neighborAggregate = this.peerInfluencePort.deriveNeighborAverageDirectionPlan({
+          subjectDotIndex: index,
+          neighborRadius: this.physicsParams.peerInfluenceRadius,
+          frameDots: frameDots ?? [],
+        });
+        const randomDirection = normalizeDirection(
+          this.nextSignedRandom(),
+          this.nextSignedRandom(),
+          this.nextSignedRandom(),
+        );
+        const impulseDirection = this.peerInfluencePort.deriveDualBiasImpulseDirectionPlan({
+          randomUnitDirection: randomDirection,
+          currentVelocityDirection: velocityDirection,
+          peerAverageDirection: neighborAggregate.averageDirection,
+          velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+          peerBiasWeight: this.physicsParams.peerBiasWeight,
+        });
+
+        vx += impulseDirection.biasedDirection[0] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+        vy += impulseDirection.biasedDirection[1] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+        vz += impulseDirection.biasedDirection[2] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+      }
 
       const speed = Math.hypot(vx, vy, vz);
       if (speed > maxSpeed && speed > 0) {
@@ -164,10 +228,9 @@ export class RandomWalkWorldSimulation {
   }
 
   private nextRandom() {
-    this.rngState ^= this.rngState << 13;
-    this.rngState ^= this.rngState >>> 17;
-    this.rngState ^= this.rngState << 5;
-    return (this.rngState >>> 0) / 4294967296;
+    const { nextState, value } = nextRandomFromState(this.rngState);
+    this.rngState = nextState;
+    return value;
   }
 
   private nextSignedRandom() {
@@ -187,66 +250,19 @@ export class RandomWalkWorldSimulation {
   }
 
   private buildContractText() {
-    let sumX = 0;
-    let sumY = 0;
-    let sumZ = 0;
-    let sumSpeed = 0;
-    let maxRadius = 0;
-
-    for (let index = 0; index < this.params.dotCount; index += 1) {
-      const offset = index * 3;
-      const x = this.positions[offset];
-      const y = this.positions[offset + 1];
-      const z = this.positions[offset + 2];
-      const vx = this.velocities[offset];
-      const vy = this.velocities[offset + 1];
-      const vz = this.velocities[offset + 2];
-
-      sumX += x;
-      sumY += y;
-      sumZ += z;
-      sumSpeed += Math.hypot(vx, vy, vz);
-      maxRadius = Math.max(maxRadius, Math.hypot(x, y, z));
-    }
-
-    const dotCount = this.params.dotCount || 1;
-    const sample0 = this.sampleAt(0);
-    const sample1 = this.sampleAt(1);
-    const sample2 = this.sampleAt(2);
-
-    const bodyLines = [
-      "[random-walk]",
-      `frame=${this.frame}`,
-      `dot_count=${this.params.dotCount}`,
-      `step_scale=${formatScalar(this.params.stepScale)}`,
-      `boundary_extent=${formatScalar(this.params.boundaryExtent)}`,
-      `avg_x=${formatScalar(sumX / dotCount)}`,
-      `avg_y=${formatScalar(sumY / dotCount)}`,
-      `avg_z=${formatScalar(sumZ / dotCount)}`,
-      `avg_speed=${formatScalar(sumSpeed / dotCount)}`,
-      `max_radius=${formatScalar(maxRadius)}`,
-      `sample_0=${sample0}`,
-      `sample_1=${sample1}`,
-      `sample_2=${sample2}`,
-    ];
-
-    const checksum = hashString(bodyLines.join("\n"));
-    return [...bodyLines, `checksum=${checksum}`].join("\n");
-  }
-
-  private sampleAt(index: number) {
-    const offset = index * 3;
-    if (offset + 2 >= this.positions.length) {
-      return "0.0000,0.0000,0.0000,0.0000,0.0000,0.0000";
-    }
-
-    return [
-      formatScalar(this.positions[offset]),
-      formatScalar(this.positions[offset + 1]),
-      formatScalar(this.positions[offset + 2]),
-      formatScalar(this.velocities[offset]),
-      formatScalar(this.velocities[offset + 1]),
-      formatScalar(this.velocities[offset + 2]),
-    ].join(",");
+    return buildRandomWalkContractText({
+      frame: this.frame,
+      mode: this.physicsParams.mode,
+      dotCount: this.params.dotCount,
+      stepScale: this.params.stepScale,
+      boundaryExtent: this.params.boundaryExtent,
+      ambientFriction: this.physicsParams.ambientFriction,
+      peerInfluenceRadius: this.physicsParams.peerInfluenceRadius,
+      velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+      peerBiasWeight: this.physicsParams.peerBiasWeight,
+      peerImpulseScale: this.physicsParams.peerImpulseScale,
+      positions: this.positions,
+      velocities: this.velocities,
+    });
   }
 }
