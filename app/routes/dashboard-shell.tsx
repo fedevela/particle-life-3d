@@ -1,5 +1,5 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles } from "lucide-react";
+import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Orbit, Sparkles } from "lucide-react";
 import { useRef, type WheelEvent } from "react";
 import { NavLink, Outlet } from "react-router";
 
@@ -9,7 +9,23 @@ import {
   HELLO_SHADER_WORLD_MOVEMENT_PARAM_ORDER,
   type HelloShaderWorldMovementParamKey,
 } from "~/types/hello-shader-world-movement";
+import {
+  RANDOM_WALK_WORLD_MENU_LABEL,
+  RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS,
+  RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS,
+  RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER,
+  RANDOM_WALK_WORLD_PARAM_CONTROLS,
+  RANDOM_WALK_WORLD_PARAM_ORDER,
+  RANDOM_WALK_WORLD_ROUTE_PATH,
+  type RandomWalkWorldPhysicsParamKey,
+  type RandomWalkWorldParamKey,
+} from "~/types/random-walk-world";
 import { useUiStore } from "~/state/ui-store";
+
+const RANDOM_WALK_MODE_LABELS: Record<(typeof RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS)[number], string> = {
+  "regular-random-walk": "Classic Random Walk",
+  "peer-influenced-random-walk": "Neighbor-Aware Walk",
+};
 
 function getDecimals(step: number) {
   const text = step.toString();
@@ -38,21 +54,39 @@ function getMovementInputValue(key: HelloShaderWorldMovementParamKey, value: num
   return value.toFixed(decimals);
 }
 
+function getRandomWalkInputValue(key: RandomWalkWorldParamKey, value: number) {
+  const decimals = getDecimals(RANDOM_WALK_WORLD_PARAM_CONTROLS[key].step);
+  return value.toFixed(decimals);
+}
+
+function getRandomWalkPhysicsInputValue(key: RandomWalkWorldPhysicsParamKey, value: number) {
+  const decimals = getDecimals(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key].step);
+  return value.toFixed(decimals);
+}
+
 /**
  * Render the dashboard layout route with navigation and an outlet region.
  *
  * @returns Returns the dashboard shell layout.
  */
 export default function DashboardShell() {
+  /** Issue #32 architecture mapping: CH-001, CH-003. */
   const isExpanded = useUiStore((state) => state.isExpanded);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const isHelloShaderWorldSubmenuOpen = useUiStore((state) => state.isHelloShaderWorldSubmenuOpen);
   const toggleHelloShaderWorldSubmenu = useUiStore((state) => state.toggleHelloShaderWorldSubmenu);
+  const isRandomWalkWorldSubmenuOpen = useUiStore((state) => state.isRandomWalkWorldSubmenuOpen);
+  const toggleRandomWalkWorldSubmenu = useUiStore((state) => state.toggleRandomWalkWorldSubmenu);
   const helloShaderWorldAmountInput = useUiStore((state) => state.helloShaderWorldAmountInput);
   const setHelloShaderWorldAmountInput = useUiStore((state) => state.setHelloShaderWorldAmountInput);
   const queueHelloShaderWorldAction = useUiStore((state) => state.queueHelloShaderWorldAction);
   const helloShaderWorldMovementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
   const setHelloShaderWorldMovementParam = useUiStore((state) => state.setHelloShaderWorldMovementParam);
+  const randomWalkWorldParams = useUiStore((state) => state.randomWalkWorldParams);
+  const setRandomWalkWorldParam = useUiStore((state) => state.setRandomWalkWorldParam);
+  const randomWalkWorldPhysicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
+  const setRandomWalkWorldPhysicsMode = useUiStore((state) => state.setRandomWalkWorldPhysicsMode);
+  const setRandomWalkWorldPhysicsParam = useUiStore((state) => state.setRandomWalkWorldPhysicsParam);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
   function queueAction(type: "add" | "remove") {
@@ -81,6 +115,28 @@ export default function DashboardShell() {
       event.deltaY,
     );
     setHelloShaderWorldMovementParam(key, String(next));
+  }
+
+  function handleRandomWalkWheel(key: RandomWalkWorldParamKey, event: WheelEvent<HTMLInputElement>) {
+    event.preventDefault();
+
+    const control = RANDOM_WALK_WORLD_PARAM_CONTROLS[key];
+    const next = applyWheelStep(randomWalkWorldParams[key], control.step, control.min, control.max, event.deltaY);
+    setRandomWalkWorldParam(key, String(next));
+  }
+
+  function handleRandomWalkPhysicsWheel(key: RandomWalkWorldPhysicsParamKey, event: WheelEvent<HTMLInputElement>) {
+    event.preventDefault();
+
+    const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
+    const next = applyWheelStep(
+      randomWalkWorldPhysicsParams[key],
+      control.step,
+      control.min,
+      control.max,
+      event.deltaY,
+    );
+    setRandomWalkWorldPhysicsParam(key, String(next));
   }
 
   return (
@@ -213,6 +269,123 @@ export default function DashboardShell() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-2">
+              <NavLink
+                to={RANDOM_WALK_WORLD_ROUTE_PATH}
+                onClick={toggleRandomWalkWorldSubmenu}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                    isActive
+                      ? "bg-cyan-400/20 text-cyan-100"
+                      : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+                  )
+                }
+              >
+                <Orbit size={16} className="shrink-0" />
+                <span className={cn("flex-1", !isExpanded && "sr-only")}>{RANDOM_WALK_WORLD_MENU_LABEL}</span>
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    "shrink-0 transition-transform duration-200",
+                    !isExpanded && "sr-only",
+                    isRandomWalkWorldSubmenuOpen && "rotate-180",
+                  )}
+                />
+              </NavLink>
+
+              {isExpanded && isRandomWalkWorldSubmenuOpen ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Issue #32 controls</p>
+                  <div className="space-y-2 border-t border-cyan-900/40 pt-2">
+                    {RANDOM_WALK_WORLD_PARAM_ORDER.map((key) => {
+                      const control = RANDOM_WALK_WORLD_PARAM_CONTROLS[key];
+                      return (
+                        <div key={key} className="space-y-1">
+                          <label
+                            className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                            htmlFor={`random-walk-world-${key}`}
+                            title={control.tooltip}
+                          >
+                            {control.label}
+                          </label>
+                          <input
+                            id={`random-walk-world-${key}`}
+                            type="number"
+                            inputMode="decimal"
+                            min={control.min}
+                            max={control.max}
+                            step={control.step}
+                            title={control.tooltip}
+                            value={getRandomWalkInputValue(key, randomWalkWorldParams[key])}
+                            onChange={(event) => setRandomWalkWorldParam(key, event.target.value)}
+                            onWheel={(event) => handleRandomWalkWheel(key, event)}
+                            className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Neighbor behavior controls</p>
+                  <div className="space-y-2 border-t border-cyan-900/40 pt-2">
+                    <div className="space-y-1">
+                      <label
+                        className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                        htmlFor="random-walk-world-mode"
+                        title="Choose classic movement or movement that reacts to nearby neighbors."
+                      >
+                        Physics Mode
+                      </label>
+                      <select
+                        id="random-walk-world-mode"
+                        value={randomWalkWorldPhysicsParams.mode}
+                        onChange={(event) => setRandomWalkWorldPhysicsMode(event.target.value as typeof randomWalkWorldPhysicsParams.mode)}
+                        className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                      >
+                        {RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {RANDOM_WALK_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {randomWalkWorldPhysicsParams.mode === "peer-influenced-random-walk" ? (
+                      RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER.map((key) => {
+                        const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
+                        return (
+                          <div key={key} className="space-y-1">
+                            <label
+                              className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                              htmlFor={`random-walk-world-${key}`}
+                              title={control.tooltip}
+                            >
+                              {control.label}
+                            </label>
+                            <input
+                              id={`random-walk-world-${key}`}
+                              type="number"
+                              inputMode="decimal"
+                              min={control.min}
+                              max={control.max}
+                              step={control.step}
+                              title={control.tooltip}
+                              value={getRandomWalkPhysicsInputValue(key, randomWalkWorldPhysicsParams[key])}
+                              onChange={(event) => setRandomWalkWorldPhysicsParam(key, event.target.value)}
+                              onWheel={(event) => handleRandomWalkPhysicsWheel(key, event)}
+                              className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                            />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-cyan-300/90">
+                        Neighbor controls are hidden in Classic Random Walk mode.
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : null}
