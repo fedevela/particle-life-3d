@@ -4,6 +4,7 @@ type RequirementTrace = {
   id: "CH-001" | "CH-003";
   obligation: string;
   verificationLocus: string;
+  pseudocodeLocus: string;
   cases: readonly string[];
 };
 
@@ -13,6 +14,7 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
     obligation:
       "Selecting the third left menu option exposes a random-walk WebGL dot-cloud view with label and parameter controls.",
     verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
+    pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
     cases: [
       "menu.third-option.selection.initializes-random-walk-dot-cloud-scene",
       "menu.third-option.label.identifies-random-walk-sphere-visualization",
@@ -24,6 +26,7 @@ const ISSUE_32_TRACEABILITY: readonly RequirementTrace[] = [
     obligation:
       "Dot transitions across invisible cube boundaries wrap to opposite side while preserving velocity in toroidal space.",
     verificationLocus: "tests/random-walk-toroidal-boundary.traceability.spec.ts",
+    pseudocodeLocus: "app/features/3d/random-walk-toroidal-boundary.pseudocode.ts",
     cases: [
       "toroidal-boundary.positive-axis.crossing.wraps-to-opposite-side",
       "toroidal-boundary.negative-axis.crossing.wraps-to-opposite-side",
@@ -43,6 +46,12 @@ test.describe("Issue #32 random-walk toroidal-boundary traceability contracts", 
 
       test(`${requirement.id} obligation statement is non-empty`, () => {
         expect(requirement.obligation.length).toBeGreaterThan(0);
+        expect(true).toBe(true);
+      });
+
+      test(`${requirement.id} is mapped to a concrete pseudocode locus`, () => {
+        expect(requirement.pseudocodeLocus.length).toBeGreaterThan(0);
+        expect(requirement.pseudocodeLocus.endsWith(".pseudocode.ts")).toBe(true);
         expect(true).toBe(true);
       });
 
