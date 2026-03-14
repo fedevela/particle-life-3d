@@ -18,6 +18,8 @@ export const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 /** Define a fixed simulation timestep used for deterministic frame progression. */
 const FIXED_TIME_STEP_SECONDS = 1 / 60;
 const TAU = Math.PI * 2;
+const FNV1A_32_OFFSET_BASIS = 2166136261;
+const FNV1A_32_PRIME = 16777619;
 /** Provide scoped logs for shader simulation lifecycle and milestones. */
 const logger = createLogger("hello-shader-world-simulation");
 
@@ -84,12 +86,13 @@ export class HelloShaderWorldSimulation {
     this.gpuComputationRenderer.setVariableDependencies(simulationStateVariable, [simulationStateVariable]);
     simulationStateVariable.material.uniforms.uFrame = { value: 0 };
     simulationStateVariable.material.uniforms.uSeed = { value: this.shaderSeedUniformValue };
-    simulationStateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
-    simulationStateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
-    simulationStateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
-    simulationStateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
-    simulationStateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
+    simulationStateVariable.material.uniforms.uAcceleration = { value: 0 };
+    simulationStateVariable.material.uniforms.uDirectionJitter = { value: 0 };
+    simulationStateVariable.material.uniforms.uMagnitudeJitter = { value: 0 };
+    simulationStateVariable.material.uniforms.uDamping = { value: 0 };
+    simulationStateVariable.material.uniforms.uMaxSpeed = { value: 0 };
     this.simulationStateVariable = simulationStateVariable;
+    this.applyMovementUniforms();
 
     const capabilities = this.renderer.capabilities as THREE.WebGLRenderer["capabilities"] & {
       maxVertexTextures: number;
@@ -240,32 +243,34 @@ export class HelloShaderWorldSimulation {
   private computeSimulationFrame(frame: number) {
     this.simulationStateVariable.material.uniforms.uFrame.value = frame;
     this.simulationStateVariable.material.uniforms.uSeed.value = this.shaderSeedUniformValue;
+    this.applyMovementUniforms();
+    this.gpuComputationRenderer.compute();
+  }
+
+  private deriveNormalizedSeedUniform(seed: string) {
+    return ((this.hashSeedToUint32(seed) >>> 0) % 1000000) / 1000000;
+  }
+
+  private deriveSeedUint32(seed: string) {
+    return this.hashSeedToUint32(seed);
+  }
+
+  private hashSeedToUint32(seed: string) {
+    let hash = FNV1A_32_OFFSET_BASIS;
+    for (let index = 0; index < seed.length; index += 1) {
+      hash ^= seed.charCodeAt(index);
+      hash = Math.imul(hash, FNV1A_32_PRIME);
+    }
+
+    return hash >>> 0;
+  }
+
+  private applyMovementUniforms() {
     this.simulationStateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
     this.simulationStateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
     this.simulationStateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
     this.simulationStateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
     this.simulationStateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
-    this.gpuComputationRenderer.compute();
-  }
-
-  private deriveNormalizedSeedUniform(seed: string) {
-    let hash = 2166136261;
-    for (let index = 0; index < seed.length; index += 1) {
-      hash ^= seed.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-
-    return ((hash >>> 0) % 1000000) / 1000000;
-  }
-
-  private deriveSeedUint32(seed: string) {
-    let hash = 2166136261;
-    for (let index = 0; index < seed.length; index += 1) {
-      hash ^= seed.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-
-    return hash >>> 0;
   }
 
   private nextDeterministicRandom() {

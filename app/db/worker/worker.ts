@@ -5,6 +5,7 @@ import type {
   CameraState,
   SimulationSnapshotUpsertInput,
   SpriteRecord,
+  SpriteUpsertInput,
   VariableRecord,
 } from "../types";
 import { createLogger } from "../../lib/logger";
@@ -119,11 +120,28 @@ function postWorkerResponse(message: WorkerResponse) {
   self.postMessage(message);
 }
 
+type WorkerSuccessData = Extract<WorkerResponse, { type: "RESPONSE"; ok: true }>["data"];
+
+function postWorkerSuccessResponse(requestId: string, data: WorkerSuccessData) {
+  postWorkerResponse({
+    type: "RESPONSE",
+    requestId,
+    ok: true,
+    data,
+  });
+}
+
 /** Emit a table update event when that table is currently subscribed. */
 function emitSubscribedTableUpdate(table: DbTable) {
   if (subscribedTablesByName.has(table)) {
     logger.debug("Emit table update event.", { table });
     postWorkerResponse({ type: "TABLE_UPDATED", table });
+  }
+}
+
+function emitSubscribedTableUpdates(tables: DbTable[]) {
+  for (const table of tables) {
+    emitSubscribedTableUpdate(table);
   }
 }
 
@@ -139,6 +157,34 @@ function resolveSpriteId(candidateId: string | undefined) {
   }
 
   return crypto.randomUUID();
+}
+
+function toSpriteRecord(payload: SpriteUpsertInput, recordId: string): SpriteRecord {
+  return {
+    id: recordId,
+    type: payload.type,
+    pos_x: payload.position[0],
+    pos_y: payload.position[1],
+    pos_z: payload.position[2],
+    metadata: stringifyJson(payload.metadata ?? {}, "sprite metadata"),
+  };
+}
+
+function upsertSpriteRecordForProject(
+  repository: SqliteRepository,
+  nextRecord: SpriteRecord,
+  projectId: string,
+) {
+  const existingId = repository.findSpriteId(nextRecord.id, projectId);
+  const operation = existingId !== null ? "update" : "insert";
+
+  if (existingId !== null) {
+    repository.updateSprite(nextRecord, projectId);
+  } else {
+    repository.insertSprite(nextRecord, projectId);
+  }
+
+  return operation;
 }
 
 /** Seed one default sprite for projects with no persisted sprites yet. */
@@ -220,7 +266,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
     case "INIT": {
       await initializeWorkerDatabase();
       logger.info("Complete INIT request.", { requestId: workerRequest.requestId });
-      postWorkerResponse({ type: "RESPONSE", requestId: workerRequest.requestId, ok: true, data: null });
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "GET_SPRITES": {
@@ -233,37 +279,15 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
         spriteCount: sprites.length,
       });
 
-      postWorkerResponse({
-        type: "RESPONSE",
-        requestId: workerRequest.requestId,
-        ok: true,
-        data: sprites,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, sprites);
       return;
     }
     case "upsert_sprite": {
       const repository = await getInitializedWorkerRepository();
 
       const recordId = resolveSpriteId(workerRequest.payload.id);
-      const metadata = stringifyJson(workerRequest.payload.metadata ?? {}, "sprite metadata");
-
-      const nextRecord: SpriteRecord = {
-        id: recordId,
-        type: workerRequest.payload.type,
-        pos_x: workerRequest.payload.position[0],
-        pos_y: workerRequest.payload.position[1],
-        pos_z: workerRequest.payload.position[2],
-        metadata,
-      };
-
-      const existingId = repository.findSpriteId(recordId, workerRequest.projectId);
-      const operation = existingId !== null ? "update" : "insert";
-
-      if (existingId !== null) {
-        repository.updateSprite(nextRecord, workerRequest.projectId);
-      } else {
-        repository.insertSprite(nextRecord, workerRequest.projectId);
-      }
+      const nextRecord = toSpriteRecord(workerRequest.payload, recordId);
+      const operation = upsertSpriteRecordForProject(repository, nextRecord, workerRequest.projectId);
 
       logger.info("Persist single sprite.", {
         requestId: workerRequest.requestId,
@@ -273,13 +297,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
       });
 
       emitSubscribedTableUpdate("sprites");
-
-      postWorkerResponse({
-        type: "RESPONSE",
-        requestId: workerRequest.requestId,
-        ok: true,
-        data: nextRecord,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, nextRecord);
       return;
     }
     case "upsert_sprites": {
@@ -290,24 +308,12 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
 
       for (const nextSprite of workerRequest.payload) {
         const recordId = resolveSpriteId(nextSprite.id);
-        const metadata = stringifyJson(nextSprite.metadata ?? {}, "sprite metadata");
+        const nextRecord = toSpriteRecord(nextSprite, recordId);
+        const operation = upsertSpriteRecordForProject(repository, nextRecord, workerRequest.projectId);
 
-        const nextRecord: SpriteRecord = {
-          id: recordId,
-          type: nextSprite.type,
-          pos_x: nextSprite.position[0],
-          pos_y: nextSprite.position[1],
-          pos_z: nextSprite.position[2],
-          metadata,
-        };
-
-        const existingId = repository.findSpriteId(recordId, workerRequest.projectId);
-
-        if (existingId !== null) {
-          repository.updateSprite(nextRecord, workerRequest.projectId);
+        if (operation === "update") {
           updateCount += 1;
         } else {
-          repository.insertSprite(nextRecord, workerRequest.projectId);
           insertCount += 1;
         }
 
@@ -327,12 +333,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
         updateCount,
       });
 
-      postWorkerResponse({
-        type: "RESPONSE",
-        requestId: workerRequest.requestId,
-        ok: true,
-        data: persistedRecords,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, persistedRecords);
       return;
     }
     case "GET_CAMERA_STATE": {
@@ -346,12 +347,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
         hasCameraState: parsed !== null,
       });
 
-      postWorkerResponse({
-        type: "RESPONSE",
-        requestId: workerRequest.requestId,
-        ok: true,
-        data: parsed,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, parsed);
       return;
     }
     case "SAVE_CAMERA_STATE": {
@@ -378,8 +374,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
       });
 
       emitSubscribedTableUpdate("variables");
-
-      postWorkerResponse({ type: "RESPONSE", requestId: workerRequest.requestId, ok: true, data: null });
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "SAVE_SIMULATION_SNAPSHOT": {
@@ -395,8 +390,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
       });
 
       emitSubscribedTableUpdate("simulation_snapshots");
-
-      postWorkerResponse({ type: "RESPONSE", requestId: workerRequest.requestId, ok: true, data: null });
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "GET_PROJECT_CONTRACT_TEXT": {
@@ -409,12 +403,7 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
         scope: workerRequest.scope ?? "all",
       });
 
-      postWorkerResponse({
-        type: "RESPONSE",
-        requestId: workerRequest.requestId,
-        ok: true,
-        data: contractText,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, contractText);
       return;
     }
     case "DELETE_PROJECT_DATA": {
@@ -425,11 +414,8 @@ async function handleWorkerRequest(workerRequest: WorkerRequest) {
         projectId: workerRequest.projectId,
       });
 
-      emitSubscribedTableUpdate("sprites");
-      emitSubscribedTableUpdate("variables");
-      emitSubscribedTableUpdate("simulation_snapshots");
-
-      postWorkerResponse({ type: "RESPONSE", requestId: workerRequest.requestId, ok: true, data: null });
+      emitSubscribedTableUpdates(["sprites", "variables", "simulation_snapshots"]);
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "SUBSCRIBE_TABLE": {

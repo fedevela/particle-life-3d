@@ -194,6 +194,15 @@ function dispatchWorkerRequest<TResponse>(request: WorkerRequest): Promise<TResp
   });
 }
 
+function createRequestId() {
+  return crypto.randomUUID();
+}
+
+async function dispatchInitializedWorkerRequest<TResponse>(request: WorkerRequest) {
+  await initializeDbBridge();
+  return dispatchWorkerRequest<TResponse>(request);
+}
+
 /**
  * Initialize the SQLite worker bridge once per browser session.
  *
@@ -212,7 +221,7 @@ export function initializeDbBridge() {
   // Cache initialization so consumers can safely call this in parallel.
   bridgeInitializationPromise = dispatchWorkerRequest<null>({
     type: "INIT",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
   }).then(() => undefined);
 
   return bridgeInitializationPromise;
@@ -226,10 +235,9 @@ export function initializeDbBridge() {
 export async function fetchSprites(projectId?: string) {
   const resolvedProjectId = resolveProjectScopeId(projectId);
   logger.debug("Fetch sprites from worker.");
-  await initializeDbBridge();
-  return dispatchWorkerRequest<SpriteRecord[]>({
+  return dispatchInitializedWorkerRequest<SpriteRecord[]>({
     type: "GET_SPRITES",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
   });
 }
@@ -242,10 +250,9 @@ export async function fetchSprites(projectId?: string) {
 export async function loadCameraState(projectId?: string) {
   const resolvedProjectId = resolveProjectScopeId(projectId);
   logger.debug("Load camera state from worker.");
-  await initializeDbBridge();
-  return dispatchWorkerRequest<CameraState | null>({
+  return dispatchInitializedWorkerRequest<CameraState | null>({
     type: "GET_CAMERA_STATE",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
   });
 }
@@ -263,10 +270,9 @@ export async function persistSprite(nextSprite: SpriteUpsertInput, projectId?: s
     spriteId: nextSprite.id ?? null,
     spriteType: nextSprite.type,
   });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<SpriteRecord>({
+  return dispatchInitializedWorkerRequest<SpriteRecord>({
     type: "upsert_sprite",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
     payload: nextSprite,
   });
@@ -284,10 +290,9 @@ export async function persistWorldState(worldStatePatch: SpriteUpsertInput[], pr
   logger.info("Persist world-state patch.", {
     patchSize: worldStatePatch.length,
   });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<SpriteRecord[]>({
+  return dispatchInitializedWorkerRequest<SpriteRecord[]>({
     type: "upsert_sprites",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
     payload: worldStatePatch,
   });
@@ -306,10 +311,9 @@ export async function persistCameraState(nextState: CameraState, projectId?: str
     position: nextState.position,
     target: nextState.target,
   });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<null>({
+  return dispatchInitializedWorkerRequest<null>({
     type: "SAVE_CAMERA_STATE",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
     payload: nextState,
   });
@@ -325,10 +329,9 @@ export async function persistSimulationSnapshot(
     milestoneId: nextSnapshot.milestoneId,
     frame: nextSnapshot.frame,
   });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<null>({
+  return dispatchInitializedWorkerRequest<null>({
     type: "SAVE_SIMULATION_SNAPSHOT",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
     payload: nextSnapshot,
   });
@@ -347,10 +350,9 @@ export async function getProjectContractText(projectId?: string, scope?: Contrac
     projectId: resolvedProjectId,
     scope: scope ?? "all",
   });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<string>({
+  return dispatchInitializedWorkerRequest<string>({
     type: "GET_PROJECT_CONTRACT_TEXT",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
     scope,
   });
@@ -365,10 +367,9 @@ export async function getProjectContractText(projectId?: string, scope?: Contrac
 export async function deleteProjectData(projectId?: string) {
   const resolvedProjectId = resolveProjectScopeId(projectId);
   logger.info("Delete project data in worker.", { projectId: resolvedProjectId });
-  await initializeDbBridge();
-  return dispatchWorkerRequest<null>({
+  return dispatchInitializedWorkerRequest<null>({
     type: "DELETE_PROJECT_DATA",
-    requestId: crypto.randomUUID(),
+    requestId: createRequestId(),
     projectId: resolvedProjectId,
   });
 }
