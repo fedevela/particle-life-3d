@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
+import { createRandomWalkWorldParameterControlsArchitecturePort } from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.architecture";
 import { RandomWalkWorldSimulation } from "~/features/3d/random-walk-world/random-walk-world-simulation";
 import { useUiStore } from "~/state/ui-store";
 import type { RandomWalkWorldPhysicsParams, RandomWalkWorldParams } from "~/types/random-walk-world";
@@ -12,6 +13,8 @@ import type { RandomWalkWorldPhysicsParams, RandomWalkWorldParams } from "~/type
 const ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-001", "CH-003"] as const;
 /** Issue #33 architecture placement mapping: CH-004, CH-005, CH-005-A, CH-008. */
 const ISSUE_33_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-004", "CH-005", "CH-005-A", "CH-008"] as const;
+/** Issue #34 architecture placement mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
+const ISSUE_34_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"] as const;
 
 declare global {
   interface Window {
@@ -42,12 +45,25 @@ function resolveRandomWalkPageConfiguration() {
 export function RandomWalkWorldPage() {
   const params = useUiStore((state) => state.randomWalkWorldParams);
   const physicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
+  const seedInput = useUiStore((state) => state.randomWalkWorldSeedInput);
   const { isTestMode, seed } = useMemo(() => resolveRandomWalkPageConfiguration(), []);
+  const parameterControlsPort = useMemo(() => createRandomWalkWorldParameterControlsArchitecturePort(), []);
   const sessionSeedRef = useRef(seed ?? crypto.randomUUID());
-  const resolvedSeed = seed ?? sessionSeedRef.current;
+  const seedPlan = parameterControlsPort.deriveSeedControlPlan({
+    querySeed: seed,
+    sessionSeed: sessionSeedRef.current,
+    uiSeedInput: seedInput,
+  });
+  const cameraContinuityPlan = parameterControlsPort.deriveCameraContinuityPlan({
+    controlsBoundBeforeEdit: ["orbit", "pan", "zoom", "touch", "drag"],
+    controlsBoundAfterEdit: ["orbit", "pan", "zoom", "touch", "drag"],
+    userCameraMoveDetected: false,
+  });
+  const resolvedSeed = seedPlan.effectiveSeed;
 
   void ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS;
   void ISSUE_33_RANDOM_WALK_PAGE_REQUIREMENTS;
+  void ISSUE_34_RANDOM_WALK_PAGE_REQUIREMENTS;
 
   return (
     <section className="h-full w-full">
@@ -56,7 +72,11 @@ export function RandomWalkWorldPage() {
         <ambientLight intensity={0.75} />
         <gridHelper args={[18, 18, "#164e63", "#0f172a"]} />
         <RandomWalkDotCloud params={params} physicsParams={physicsParams} seed={resolvedSeed} isTestMode={isTestMode} />
-        <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
+        <OrbitControls
+          makeDefault
+          enableDamping={cameraContinuityPlan.preserveDefaultOrbitBindings}
+          dampingFactor={0.08}
+        />
       </Canvas>
     </section>
   );
@@ -71,10 +91,16 @@ type RandomWalkDotCloudProps = {
 
 function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomWalkDotCloudProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const simulationRef = useRef<RandomWalkWorldSimulation | null>(null);
   const simulation = useMemo(
     () => new RandomWalkWorldSimulation(params, seed, isTestMode, physicsParams),
-    [params, seed, isTestMode, physicsParams],
+    [params, seed, isTestMode],
   );
+  simulationRef.current = simulation;
+
+  useEffect(() => {
+    simulationRef.current?.setPhysicsParams(physicsParams);
+  }, [physicsParams]);
 
   useEffect(() => {
     if (!isTestMode) {

@@ -1,6 +1,9 @@
 /** Define the sidebar route label and path for the random-walk surface (CH-001). */
 export const RANDOM_WALK_WORLD_ROUTE_PATH = "/random-walk-world";
 export const RANDOM_WALK_WORLD_MENU_LABEL = "Swarm Simulator";
+/** Issue #34 ownership seam: CH-002 seed input source for deterministic replay. */
+export const RANDOM_WALK_WORLD_SEED_INPUT_ID = "random-walk-world-seed";
+export const DEFAULT_RANDOM_WALK_WORLD_SEED_INPUT = "";
 
 export type RandomWalkWorldParamKey = "dotCount" | "stepScale" | "boundaryExtent";
 
@@ -11,6 +14,12 @@ export type RandomWalkWorldParamControl = {
   min: number;
   max: number;
   step: number;
+  tooltip: string;
+};
+
+export type RandomWalkWorldSeedControl = {
+  label: string;
+  placeholder: string;
   tooltip: string;
 };
 
@@ -71,6 +80,12 @@ export const RANDOM_WALK_WORLD_PARAM_CONTROLS: Record<RandomWalkWorldParamKey, R
     step: 0.05,
     tooltip: "How far dots can move from center before wrapping to the other side.",
   },
+};
+
+export const RANDOM_WALK_WORLD_SEED_CONTROL: RandomWalkWorldSeedControl = {
+  label: "Deterministic Seed",
+  placeholder: "Leave blank for session fallback",
+  tooltip: "Shared seed text reproduces the same movement pattern across runs.",
 };
 
 export const DEFAULT_RANDOM_WALK_WORLD_PARAMS: RandomWalkWorldParams = {

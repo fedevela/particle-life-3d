@@ -10,6 +10,7 @@ import {
 import {
   clampRandomWalkWorldPhysicsParams,
   clampRandomWalkWorldParams,
+  DEFAULT_RANDOM_WALK_WORLD_SEED_INPUT,
   DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
   DEFAULT_RANDOM_WALK_WORLD_PARAMS,
   RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS,
@@ -68,10 +69,16 @@ function parseRandomWalkPhysicsParamInput(key: RandomWalkWorldPhysicsParamKey, r
   return Math.min(control.max, Math.max(control.min, parsed));
 }
 
+function parseRandomWalkSeedInput(rawValue: string) {
+  return rawValue;
+}
+
 /** Define dashboard shell UI state shape managed in Zustand. */
 type UiState = {
   /** Issue #32 ownership mapping: CH-001, CH-003. */
   issue32ArchitectureRequirementIds: readonly ["CH-001", "CH-003"];
+  /** Issue #34 ownership mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
+  issue34ArchitectureRequirementIds: readonly ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"];
   isExpanded: boolean;
   toggleSidebar: () => void;
   isHelloShaderWorldSubmenuOpen: boolean;
@@ -89,6 +96,8 @@ type UiState = {
   randomWalkWorldParams: RandomWalkWorldParams;
   setRandomWalkWorldParam: (key: RandomWalkWorldParamKey, rawValue: string) => void;
   setRandomWalkWorldParams: (nextParams: RandomWalkWorldParams) => void;
+  randomWalkWorldSeedInput: string;
+  setRandomWalkWorldSeedInput: (nextSeed: string) => void;
   randomWalkWorldPhysicsParams: RandomWalkWorldPhysicsParams;
   setRandomWalkWorldPhysicsMode: (mode: RandomWalkPhysicsMode) => void;
   setRandomWalkWorldPhysicsParam: (key: RandomWalkWorldPhysicsParamKey, rawValue: string) => void;
@@ -102,6 +111,7 @@ type UiState = {
  */
 export const useUiStore = create<UiState>((set) => ({
   issue32ArchitectureRequirementIds: ["CH-001", "CH-003"],
+  issue34ArchitectureRequirementIds: ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"],
   isExpanded: true,
   toggleSidebar: () => set((state) => ({ isExpanded: !state.isExpanded })),
   isHelloShaderWorldSubmenuOpen: false,
@@ -160,6 +170,11 @@ export const useUiStore = create<UiState>((set) => ({
   setRandomWalkWorldParams: (nextParams) =>
     set({
       randomWalkWorldParams: clampRandomWalkWorldParams(nextParams),
+    }),
+  randomWalkWorldSeedInput: DEFAULT_RANDOM_WALK_WORLD_SEED_INPUT,
+  setRandomWalkWorldSeedInput: (nextSeed) =>
+    set({
+      randomWalkWorldSeedInput: parseRandomWalkSeedInput(nextSeed),
     }),
   randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
     ...DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,

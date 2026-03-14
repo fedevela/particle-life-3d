@@ -10,6 +10,8 @@ import {
   type HelloShaderWorldMovementParamKey,
 } from "~/types/hello-shader-world-movement";
 import {
+  RANDOM_WALK_WORLD_SEED_CONTROL,
+  RANDOM_WALK_WORLD_SEED_INPUT_ID,
   RANDOM_WALK_WORLD_MENU_LABEL,
   RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS,
   RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS,
@@ -84,6 +86,8 @@ export default function DashboardShell() {
   const setHelloShaderWorldMovementParam = useUiStore((state) => state.setHelloShaderWorldMovementParam);
   const randomWalkWorldParams = useUiStore((state) => state.randomWalkWorldParams);
   const setRandomWalkWorldParam = useUiStore((state) => state.setRandomWalkWorldParam);
+  const randomWalkWorldSeedInput = useUiStore((state) => state.randomWalkWorldSeedInput);
+  const setRandomWalkWorldSeedInput = useUiStore((state) => state.setRandomWalkWorldSeedInput);
   const randomWalkWorldPhysicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
   const setRandomWalkWorldPhysicsMode = useUiStore((state) => state.setRandomWalkWorldPhysicsMode);
   const setRandomWalkWorldPhysicsParam = useUiStore((state) => state.setRandomWalkWorldPhysicsParam);
@@ -300,7 +304,25 @@ export default function DashboardShell() {
 
               {isExpanded && isRandomWalkWorldSubmenuOpen ? (
                 <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Issue #32 controls</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Issue #32 and #34 controls</p>
+                  <div className="space-y-1 border-t border-cyan-900/40 pt-2">
+                    <label
+                      className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                      htmlFor={RANDOM_WALK_WORLD_SEED_INPUT_ID}
+                      title={RANDOM_WALK_WORLD_SEED_CONTROL.tooltip}
+                    >
+                      {RANDOM_WALK_WORLD_SEED_CONTROL.label}
+                    </label>
+                    <input
+                      id={RANDOM_WALK_WORLD_SEED_INPUT_ID}
+                      type="text"
+                      title={RANDOM_WALK_WORLD_SEED_CONTROL.tooltip}
+                      placeholder={RANDOM_WALK_WORLD_SEED_CONTROL.placeholder}
+                      value={randomWalkWorldSeedInput}
+                      onChange={(event) => setRandomWalkWorldSeedInput(event.target.value)}
+                      className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                    />
+                  </div>
                   <div className="space-y-2 border-t border-cyan-900/40 pt-2">
                     {RANDOM_WALK_WORLD_PARAM_ORDER.map((key) => {
                       const control = RANDOM_WALK_WORLD_PARAM_CONTROLS[key];
