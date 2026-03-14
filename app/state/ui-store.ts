@@ -8,8 +8,14 @@ import {
   type HelloShaderWorldMovementParams,
 } from "~/types/hello-shader-world-movement";
 import {
+  clampRandomWalkWorldPhysicsParams,
   clampRandomWalkWorldParams,
+  DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
   DEFAULT_RANDOM_WALK_WORLD_PARAMS,
+  RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS,
+  type RandomWalkPhysicsMode,
+  type RandomWalkWorldPhysicsParamKey,
+  type RandomWalkWorldPhysicsParams,
   RANDOM_WALK_WORLD_PARAM_CONTROLS,
   type RandomWalkWorldParamKey,
   type RandomWalkWorldParams,
@@ -52,6 +58,16 @@ function parseRandomWalkParamInput(key: RandomWalkWorldParamKey, rawValue: strin
   return Math.min(control.max, Math.max(control.min, parsed));
 }
 
+function parseRandomWalkPhysicsParamInput(key: RandomWalkWorldPhysicsParamKey, rawValue: string) {
+  const parsed = Number.parseFloat(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS[key];
+  }
+
+  const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
+  return Math.min(control.max, Math.max(control.min, parsed));
+}
+
 /** Define dashboard shell UI state shape managed in Zustand. */
 type UiState = {
   /** Issue #32 ownership mapping: CH-001, CH-003. */
@@ -73,6 +89,10 @@ type UiState = {
   randomWalkWorldParams: RandomWalkWorldParams;
   setRandomWalkWorldParam: (key: RandomWalkWorldParamKey, rawValue: string) => void;
   setRandomWalkWorldParams: (nextParams: RandomWalkWorldParams) => void;
+  randomWalkWorldPhysicsParams: RandomWalkWorldPhysicsParams;
+  setRandomWalkWorldPhysicsMode: (mode: RandomWalkPhysicsMode) => void;
+  setRandomWalkWorldPhysicsParam: (key: RandomWalkWorldPhysicsParamKey, rawValue: string) => void;
+  setRandomWalkWorldPhysicsParams: (nextParams: RandomWalkWorldPhysicsParams) => void;
 };
 
 /**
@@ -135,5 +155,24 @@ export const useUiStore = create<UiState>((set) => ({
   setRandomWalkWorldParams: (nextParams) =>
     set({
       randomWalkWorldParams: clampRandomWalkWorldParams(nextParams),
+    }),
+  randomWalkWorldPhysicsParams: DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  setRandomWalkWorldPhysicsMode: (mode) =>
+    set((state) => ({
+      randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
+        ...state.randomWalkWorldPhysicsParams,
+        mode,
+      }),
+    })),
+  setRandomWalkWorldPhysicsParam: (key, rawValue) =>
+    set((state) => ({
+      randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
+        ...state.randomWalkWorldPhysicsParams,
+        [key]: parseRandomWalkPhysicsParamInput(key, rawValue),
+      }),
+    })),
+  setRandomWalkWorldPhysicsParams: (nextParams) =>
+    set({
+      randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams(nextParams),
     }),
 }));

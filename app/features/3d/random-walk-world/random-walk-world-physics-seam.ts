@@ -4,10 +4,19 @@ import type {
   ToroidalBoundary,
   ToroidalWrapTransition,
 } from "~/types/random-walk-world";
+import {
+  createRandomWalkPeerInfluenceArchitecturePort,
+  type RandomWalkPeerInfluenceArchitecturePort,
+} from "~/features/3d/random-walk-world/random-walk-peer-influence.architecture";
 
 /** Issue #32 architecture seam mapping: CH-001, CH-003. */
 export const ISSUE_32_RANDOM_WALK_PHYSICS_SEAM = {
   requirementIds: ["CH-001", "CH-003"] as const,
+  owner: "app/features/3d/random-walk-world/random-walk-world-physics-seam.ts",
+} as const;
+/** Issue #33 architecture seam mapping: CH-004, CH-005, CH-005-A, CH-008. */
+export const ISSUE_33_RANDOM_WALK_PHYSICS_SEAM = {
+  requirementIds: ["CH-004", "CH-005", "CH-005-A", "CH-008"] as const,
   owner: "app/features/3d/random-walk-world/random-walk-world-physics-seam.ts",
 } as const;
 
@@ -22,6 +31,11 @@ export type RandomWalkSimulationHandle = {
 export type RandomWalkToroidalPhysicsPort = {
   initializeSimulation: (params: RandomWalkWorldParams) => RandomWalkSimulationHandle;
   deriveToroidalWrapTransition: (dot: DotKinematics, boundary: ToroidalBoundary) => ToroidalWrapTransition;
+};
+
+export type RandomWalkWorldPhysicsPorts = {
+  toroidal: RandomWalkToroidalPhysicsPort;
+  peerInfluenceArchitecture: RandomWalkPeerInfluenceArchitecturePort;
 };
 
 function wrapAxis(value: number, min: number, max: number) {
@@ -56,5 +70,12 @@ export function createRandomWalkToroidalPhysicsPort(): RandomWalkToroidalPhysics
       dispose: () => {},
     }),
     deriveToroidalWrapTransition: computeToroidalWrapTransition,
+  };
+}
+
+export function createRandomWalkWorldPhysicsPorts(): RandomWalkWorldPhysicsPorts {
+  return {
+    toroidal: createRandomWalkToroidalPhysicsPort(),
+    peerInfluenceArchitecture: createRandomWalkPeerInfluenceArchitecturePort(),
   };
 }

@@ -1,5 +1,13 @@
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
-import type { RandomWalkWorldParams } from "~/types/random-walk-world";
+import {
+  createRandomWalkPhysicsArchitectureBindings,
+  type RandomWalkPeerInfluenceArchitecturePort,
+} from "~/features/3d/random-walk-world/random-walk-peer-influence.architecture";
+import {
+  DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  type RandomWalkWorldPhysicsParams,
+  type RandomWalkWorldParams,
+} from "~/types/random-walk-world";
 
 const RANDOM_WALK_FIXED_FPS = 60;
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / RANDOM_WALK_FIXED_FPS;
@@ -39,19 +47,28 @@ export function getRandomWalkFrameForTimeMs(timeMs: number) {
 
 export class RandomWalkWorldSimulation {
   private readonly params: RandomWalkWorldParams;
+  private readonly physicsParams: RandomWalkWorldPhysicsParams;
   private readonly seed: string;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly captureContractFrames: boolean;
   private readonly contractsByFrame = new Map<number, string>();
   private readonly physicsPort = createRandomWalkToroidalPhysicsPort();
+  private readonly peerInfluencePort: RandomWalkPeerInfluenceArchitecturePort;
   private rngState: number;
   private frame = 0;
 
-  constructor(params: RandomWalkWorldParams, seed: string, captureContractFrames = false) {
+  constructor(
+    params: RandomWalkWorldParams,
+    seed: string,
+    captureContractFrames = false,
+    physicsParams: RandomWalkWorldPhysicsParams = DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  ) {
     this.params = params;
+    this.physicsParams = physicsParams;
     this.seed = seed;
     this.captureContractFrames = captureContractFrames;
+    this.peerInfluencePort = createRandomWalkPhysicsArchitectureBindings(physicsParams).port;
     this.positions = new Float32Array(params.dotCount * 3);
     this.velocities = new Float32Array(params.dotCount * 3);
     this.rngState = hashSeed(seed);
@@ -68,6 +85,14 @@ export class RandomWalkWorldSimulation {
   }
 
   public stepFrame() {
+    void this.peerInfluencePort.deriveFrameUpdatePlan({
+      mode: this.physicsParams.mode,
+      frictionFactor: this.physicsParams.ambientFriction,
+      peerRadius: this.physicsParams.peerInfluenceRadius,
+      velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+      peerBiasWeight: this.physicsParams.peerBiasWeight,
+    });
+
     const boundary = {
       min: [-this.params.boundaryExtent, -this.params.boundaryExtent, -this.params.boundaryExtent] as const,
       max: [this.params.boundaryExtent, this.params.boundaryExtent, this.params.boundaryExtent] as const,
