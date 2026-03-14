@@ -1,10 +1,16 @@
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
 import {
-  createRandomWalkPhysicsArchitectureBindings,
-  type RandomWalkPeerInfluenceArchitecturePort,
-} from "~/features/3d/random-walk-world/random-walk-peer-influence.architecture";
-import { createRandomWalkWorldParameterControlsArchitecturePort } from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.architecture";
+  deriveAmbientFrictionDecayPlan,
+  deriveDualBiasImpulseDirectionPlan,
+  deriveFrameUpdatePlan,
+  deriveNeighborAverageDirectionPlan,
+} from "~/features/3d/random-walk-world/peer-influence/runtime";
 import { buildRandomWalkContractText } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-contract";
+import {
+  assessFrameProgression,
+  normalizeAmbientFriction,
+  shouldApplyRealtimePhysicsParams,
+} from "~/features/3d/random-walk-world/simulation/random-walk-parameter-runtime";
 import { hashSeed, nextRandomFromState } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-rng";
 import {
   DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
@@ -15,8 +21,6 @@ import {
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
 const REGULAR_IMPULSE_SCALE_FACTOR = 0.15;
-/** Issue #34 architecture placement mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
-const ISSUE_34_RANDOM_WALK_SIM_REQUIREMENTS = ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"] as const;
 
 function normalizeDirection(x: number, y: number, z: number): [number, number, number] {
   const length = Math.hypot(x, y, z);
@@ -44,8 +48,6 @@ export class RandomWalkWorldSimulation {
   private readonly captureContractFrames: boolean;
   private readonly contractsByFrame = new Map<number, string>();
   private readonly physicsPort = createRandomWalkToroidalPhysicsPort();
-  private readonly peerInfluencePort: RandomWalkPeerInfluenceArchitecturePort;
-  private readonly parameterControlsPort = createRandomWalkWorldParameterControlsArchitecturePort();
   private rngState: number;
   private physicsParamsVersion = 0;
   private lastAppliedPhysicsParamsVersion = -1;
@@ -57,13 +59,10 @@ export class RandomWalkWorldSimulation {
     captureContractFrames = false,
     physicsParams: RandomWalkWorldPhysicsParams = DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
   ) {
-    void ISSUE_34_RANDOM_WALK_SIM_REQUIREMENTS;
-
     this.params = params;
     this.physicsParams = physicsParams;
     this.seed = seed;
     this.captureContractFrames = captureContractFrames;
-    this.peerInfluencePort = createRandomWalkPhysicsArchitectureBindings(physicsParams).port;
     this.positions = new Float32Array(params.dotCount * 3);
     this.velocities = new Float32Array(params.dotCount * 3);
     this.rngState = hashSeed(seed);
@@ -80,24 +79,19 @@ export class RandomWalkWorldSimulation {
   }
 
   public stepFrame() {
-    const realtimePropagationPlan = this.parameterControlsPort.deriveRealtimePhysicsPropagationPlan({
+    if (
+      shouldApplyRealtimePhysicsParams({
       latestUiPhysicsParamsVersion: this.physicsParamsVersion,
       lastAppliedPhysicsParamsVersion: this.lastAppliedPhysicsParamsVersion,
-      frameNumber: this.frame,
-      physicsParams: this.physicsParams,
-    });
-    if (realtimePropagationPlan.shouldApplyOnCurrentFrame) {
+      })
+    ) {
       this.lastAppliedPhysicsParamsVersion = this.physicsParamsVersion;
     }
 
-    const frictionOwnershipPlan = this.parameterControlsPort.deriveFrictionHaltingOwnershipPlan({
-      ambientFriction: this.physicsParams.ambientFriction,
-      peerImpulseScale: this.physicsParams.peerImpulseScale,
-    });
-
-    const framePlan = this.peerInfluencePort.deriveFrameUpdatePlan({
+    const normalizedFriction = normalizeAmbientFriction(this.physicsParams.ambientFriction);
+    const framePlan = deriveFrameUpdatePlan({
       mode: this.physicsParams.mode,
-      frictionFactor: frictionOwnershipPlan.normalizedFrictionFactor,
+      frictionFactor: normalizedFriction,
       peerRadius: this.physicsParams.peerInfluenceRadius,
       velocityBiasWeight: this.physicsParams.velocityBiasWeight,
       peerBiasWeight: this.physicsParams.peerBiasWeight,
@@ -143,16 +137,16 @@ export class RandomWalkWorldSimulation {
         vy += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
         vz += this.nextSignedRandom() * this.params.stepScale * REGULAR_IMPULSE_SCALE_FACTOR;
       } else {
-        const friction = this.peerInfluencePort.deriveAmbientFrictionDecayPlan({
+        const friction = deriveAmbientFrictionDecayPlan({
           velocity: [vx, vy, vz],
-          frictionFactor: this.physicsParams.ambientFriction,
+          frictionFactor: normalizedFriction,
         });
         vx = friction.decayedVelocity[0];
         vy = friction.decayedVelocity[1];
         vz = friction.decayedVelocity[2];
 
         const velocityDirection = normalizeDirection(vx, vy, vz);
-        const neighborAggregate = this.peerInfluencePort.deriveNeighborAverageDirectionPlan({
+        const neighborAggregate = deriveNeighborAverageDirectionPlan({
           subjectDotIndex: index,
           neighborRadius: this.physicsParams.peerInfluenceRadius,
           frameDots: frameDots ?? [],
@@ -162,7 +156,7 @@ export class RandomWalkWorldSimulation {
           this.nextSignedRandom(),
           this.nextSignedRandom(),
         );
-        const impulseDirection = this.peerInfluencePort.deriveDualBiasImpulseDirectionPlan({
+        const impulseDirection = deriveDualBiasImpulseDirectionPlan({
           randomUnitDirection: randomDirection,
           currentVelocityDirection: velocityDirection,
           peerAverageDirection: neighborAggregate.averageDirection,
@@ -209,7 +203,7 @@ export class RandomWalkWorldSimulation {
       );
     }
 
-    this.parameterControlsPort.deriveFrameProgressionPlan({
+    assessFrameProgression({
       frameDurationMs: RANDOM_WALK_FRAME_DURATION_MS,
       previousAverageSpeed: previousSpeedTotal / this.params.dotCount,
       nextAverageSpeed: nextSpeedTotal / this.params.dotCount,

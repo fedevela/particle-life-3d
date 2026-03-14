@@ -75,10 +75,6 @@ function parseRandomWalkSeedInput(rawValue: string) {
 
 /** Define dashboard shell UI state shape managed in Zustand. */
 type UiState = {
-  /** Issue #32 ownership mapping: CH-001, CH-003. */
-  issue32ArchitectureRequirementIds: readonly ["CH-001", "CH-003"];
-  /** Issue #34 ownership mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
-  issue34ArchitectureRequirementIds: readonly ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"];
   isExpanded: boolean;
   toggleSidebar: () => void;
   isHelloShaderWorldSubmenuOpen: boolean;
@@ -110,8 +106,6 @@ type UiState = {
  * @returns Returns the UI store hook for reading and mutating shell state.
  */
 export const useUiStore = create<UiState>((set) => ({
-  issue32ArchitectureRequirementIds: ["CH-001", "CH-003"],
-  issue34ArchitectureRequirementIds: ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"],
   isExpanded: true,
   toggleSidebar: () => set((state) => ({ isExpanded: !state.isExpanded })),
   isHelloShaderWorldSubmenuOpen: false,

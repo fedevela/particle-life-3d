@@ -23,6 +23,14 @@ async function waitForRandomWalkTestApis(page: Page) {
     .toEqual({ hasGetContract: true, hasReset: true });
 }
 
+async function waitForRandomWalkCameraApi(page: Page) {
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => typeof window.__GET_RANDOM_WALK_CAMERA_STATE__ === "function");
+    }, { timeout: 15_000, intervals: [100, 250, 500] })
+    .toBe(true);
+}
+
 async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -59,6 +67,16 @@ async function resetRandomWalkSimulation(page: Page) {
   });
 }
 
+async function getRandomWalkCameraState(page: Page) {
+  return page.evaluate(() => {
+    if (typeof window.__GET_RANDOM_WALK_CAMERA_STATE__ !== "function") {
+      throw new Error("window.__GET_RANDOM_WALK_CAMERA_STATE__ is not available.");
+    }
+
+    return window.__GET_RANDOM_WALK_CAMERA_STATE__();
+  });
+}
+
 function parseContractMetric(contractText: string, key: string) {
   const line = contractText
     .split("\n")
@@ -69,6 +87,17 @@ function parseContractMetric(contractText: string, key: string) {
 
   const [, rawValue] = line.split("=");
   return Number.parseFloat(rawValue);
+}
+
+function parseCameraDistance(cameraState: { position: readonly [number, number, number]; target: readonly [number, number, number] }) {
+  const dx = cameraState.position[0] - cameraState.target[0];
+  const dy = cameraState.position[1] - cameraState.target[1];
+  const dz = cameraState.position[2] - cameraState.target[2];
+  return Math.hypot(dx, dy, dz);
+}
+
+function parseContractFrame(contractText: string) {
+  return parseContractMetric(contractText, "frame");
 }
 
 async function wheelInput(input: Locator, deltaY: number) {
@@ -121,6 +150,7 @@ async function openRandomWalkControls(page: Page, seed: string) {
   await expect(page.locator("#random-walk-world-dotCount")).toBeVisible();
   await expect(page.locator("#random-walk-world-stepScale")).toBeVisible();
   await expect(page.locator("#random-walk-world-boundaryExtent")).toBeVisible();
+  await waitForRandomWalkCameraApi(page);
 }
 
 test("menu link opens random-walk scene and controls", async ({ page }) => {
@@ -299,6 +329,86 @@ test("ambient friction updates on next frame and increases halting trend when ra
   await resetRandomWalkSimulation(page);
   const postResetHighFrictionAvgSpeed = parseContractMetric(await getRandomWalkContractAtTimeMs(page, 360), "avg_speed");
   expect(postResetHighFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
+});
+
+test("camera orbit and zoom controls remain functional after parameter edits", async ({ page }) => {
+  await openRandomWalkControls(page, "random-walk-camera-continuity-controls");
+
+  const canvas = page.locator("canvas");
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  if (!bounds) {
+    throw new Error("Expected canvas bounds to be available.");
+  }
+
+  const initialCamera = await getRandomWalkCameraState(page);
+  const initialDistance = parseCameraDistance(initialCamera);
+
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 + 100, bounds.y + bounds.height / 2 + 60);
+  await page.mouse.up();
+  await page.waitForTimeout(120);
+
+  const rotatedCamera = await getRandomWalkCameraState(page);
+  expect(rotatedCamera.position).not.toEqual(initialCamera.position);
+
+  await page.locator("#random-walk-world-seed").fill("issue-34-camera-seed");
+  await page.locator("#random-walk-world-stepScale").fill("0.031");
+  await page.locator("#random-walk-world-boundaryExtent").fill("12.5");
+
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.wheel(0, -420);
+  await page.waitForTimeout(120);
+
+  const zoomedCamera = await getRandomWalkCameraState(page);
+  const zoomedDistance = parseCameraDistance(zoomedCamera);
+  expect(zoomedDistance).toBeLessThan(initialDistance);
+
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 - 80, bounds.y + bounds.height / 2 - 40);
+  await page.mouse.up();
+  await page.waitForTimeout(120);
+
+  const finalCamera = await getRandomWalkCameraState(page);
+  expect(finalCamera.position).not.toEqual(zoomedCamera.position);
+});
+
+test("frame progression stays bounded and deterministic across milestone updates", async ({ page }) => {
+  await openRandomWalkControls(page, "random-walk-frame-progression-controls");
+
+  const modeSelect = page.locator("#random-walk-world-mode");
+  await modeSelect.selectOption("peer-influenced-random-walk");
+  await page.locator("#random-walk-world-ambientFriction").fill("0.35");
+  await page.locator("#random-walk-world-peerImpulseScale").fill("1.10");
+  await page.locator("#random-walk-world-stepScale").fill("0.028");
+
+  const milestones = [0, 72, 144, 216, 288, 360] as const;
+  const contracts: string[] = [];
+  for (const timeMs of milestones) {
+    await resetRandomWalkSimulation(page);
+    contracts.push(await getRandomWalkContractAtTimeMs(page, timeMs));
+  }
+  const frames = contracts.map((contract) => parseContractFrame(contract));
+  const speeds = contracts.map((contract) => parseContractMetric(contract, "avg_speed"));
+  const maxRadii = contracts.map((contract) => parseContractMetric(contract, "max_radius"));
+  const stepScale = parseContractMetric(contracts[0], "step_scale");
+  const boundaryExtent = parseContractMetric(contracts[0], "boundary_extent");
+
+  for (let index = 1; index < frames.length; index += 1) {
+    expect(frames[index]).toBeGreaterThan(frames[index - 1]);
+  }
+
+  for (const speed of speeds) {
+    expect(speed).toBeGreaterThanOrEqual(0);
+    expect(speed).toBeLessThanOrEqual(stepScale * 3 + 0.02);
+  }
+
+  const maxAllowedRadius = Math.sqrt(3 * boundaryExtent * boundaryExtent) + 0.0001;
+  for (const maxRadius of maxRadii) {
+    expect(maxRadius).toBeLessThanOrEqual(maxAllowedRadius);
+  }
 });
 
 test("toroidal wrap preserves velocity vector", async () => {

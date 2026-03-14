@@ -1,20 +1,15 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
-import { createRandomWalkWorldParameterControlsArchitecturePort } from "~/features/3d/random-walk-world/random-walk-world-parameter-controls.architecture";
 import { RandomWalkWorldSimulation } from "~/features/3d/random-walk-world/random-walk-world-simulation";
+import { resolveRandomWalkSeed } from "~/features/3d/random-walk-world/simulation/random-walk-parameter-runtime";
 import { useUiStore } from "~/state/ui-store";
 import type { RandomWalkWorldPhysicsParams, RandomWalkWorldParams } from "~/types/random-walk-world";
 
-/** Issue #32 architecture placement mapping: CH-001, CH-003. */
-const ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-001", "CH-003"] as const;
-/** Issue #33 architecture placement mapping: CH-004, CH-005, CH-005-A, CH-008. */
-const ISSUE_33_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-004", "CH-005", "CH-005-A", "CH-008"] as const;
-/** Issue #34 architecture placement mapping: CH-002, CH-006, CH-007, CH-009, CH-010. */
-const ISSUE_34_RANDOM_WALK_PAGE_REQUIREMENTS = ["CH-002", "CH-006", "CH-007", "CH-009", "CH-010"] as const;
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_STEPS_PER_RENDER = 5;
 
@@ -23,6 +18,10 @@ declare global {
     __GET_RANDOM_WALK_FRAME__?: () => number;
     __GET_RANDOM_WALK_CONTRACT_TEXT__?: (timeMs?: number) => string;
     __RESET_RANDOM_WALK_SIM_FOR_TEST__?: () => void;
+    __GET_RANDOM_WALK_CAMERA_STATE__?: () => {
+      position: readonly [number, number, number];
+      target: readonly [number, number, number];
+    };
   }
 }
 
@@ -49,23 +48,14 @@ export function RandomWalkWorldPage() {
   const physicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
   const seedInput = useUiStore((state) => state.randomWalkWorldSeedInput);
   const { isTestMode, seed } = useMemo(() => resolveRandomWalkPageConfiguration(), []);
-  const parameterControlsPort = useMemo(() => createRandomWalkWorldParameterControlsArchitecturePort(), []);
   const sessionSeedRef = useRef(seed ?? crypto.randomUUID());
-  const seedPlan = parameterControlsPort.deriveSeedControlPlan({
+  const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
+  const seedPlan = resolveRandomWalkSeed({
     querySeed: seed,
     sessionSeed: sessionSeedRef.current,
     uiSeedInput: seedInput,
   });
-  const cameraContinuityPlan = parameterControlsPort.deriveCameraContinuityPlan({
-    controlsBoundBeforeEdit: ["orbit", "pan", "zoom", "touch", "drag"],
-    controlsBoundAfterEdit: ["orbit", "pan", "zoom", "touch", "drag"],
-    userCameraMoveDetected: false,
-  });
   const resolvedSeed = seedPlan.effectiveSeed;
-
-  void ISSUE_32_RANDOM_WALK_PAGE_REQUIREMENTS;
-  void ISSUE_33_RANDOM_WALK_PAGE_REQUIREMENTS;
-  void ISSUE_34_RANDOM_WALK_PAGE_REQUIREMENTS;
 
   return (
     <section className="h-full w-full">
@@ -75,10 +65,12 @@ export function RandomWalkWorldPage() {
         <gridHelper args={[18, 18, "#164e63", "#0f172a"]} />
         <RandomWalkDotCloud params={params} physicsParams={physicsParams} seed={resolvedSeed} isTestMode={isTestMode} />
         <OrbitControls
+          ref={orbitControlsRef}
           makeDefault
-          enableDamping={cameraContinuityPlan.preserveDefaultOrbitBindings}
+          enableDamping
           dampingFactor={0.08}
         />
+        <RandomWalkCameraTestApi isTestMode={isTestMode} orbitControlsRef={orbitControlsRef} />
       </Canvas>
     </section>
   );
@@ -90,6 +82,40 @@ type RandomWalkDotCloudProps = {
   seed: string;
   isTestMode: boolean;
 };
+
+type RandomWalkCameraTestApiProps = {
+  isTestMode: boolean;
+  orbitControlsRef: RefObject<OrbitControlsImpl | null>;
+};
+
+function RandomWalkCameraTestApi({ isTestMode, orbitControlsRef }: RandomWalkCameraTestApiProps) {
+  useEffect(() => {
+    if (!isTestMode) {
+      return;
+    }
+
+    window.__GET_RANDOM_WALK_CAMERA_STATE__ = () => {
+      const controls = orbitControlsRef.current;
+      if (!controls) {
+        return {
+          position: [0, 0, 0] as const,
+          target: [0, 0, 0] as const,
+        };
+      }
+
+      return {
+        position: [controls.object.position.x, controls.object.position.y, controls.object.position.z] as const,
+        target: [controls.target.x, controls.target.y, controls.target.z] as const,
+      };
+    };
+
+    return () => {
+      delete window.__GET_RANDOM_WALK_CAMERA_STATE__;
+    };
+  }, [isTestMode, orbitControlsRef]);
+
+  return null;
+}
 
 function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomWalkDotCloudProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);

@@ -95,7 +95,7 @@ What this actually validates:
   - globals: `__GET_SHADER_CONTRACT_TEXT__`, `__GET_SHADER_FRAME__`, `__RESET_SHADER_SIM_FOR_TEST__`
 - `random-walk-world`
   - URL params: `?testMode=true&seed=<seed>`
-  - globals: `__GET_RANDOM_WALK_CONTRACT_TEXT__`, `__GET_RANDOM_WALK_FRAME__`, `__RESET_RANDOM_WALK_SIM_FOR_TEST__`
+  - globals: `__GET_RANDOM_WALK_CONTRACT_TEXT__`, `__GET_RANDOM_WALK_FRAME__`, `__RESET_RANDOM_WALK_SIM_FOR_TEST__`, `__GET_RANDOM_WALK_CAMERA_STATE__`
 
 ### Milestone constants (do not drift casually)
 
@@ -127,6 +127,7 @@ Then rerun without the env var and confirm green.
 - `tests/hello-world/hello-world.contract.spec.ts` validates raw DB contract text.
 - `tests/hello-shader-world/hello-shader-world.contract.spec.ts` validates deterministic shader text contracts.
 - `tests/random-walk-world/random-walk-world.contract.spec.ts` validates deterministic random-walk text contracts.
+- `tests/random-walk-world/random-walk-world.ui.spec.ts` validates random-walk UI controls, seed determinism, camera continuity, and bounded frame progression.
 - Contract assertions are strict text equality unless a test explicitly uses `trimEnd()`.
 - If route structure or types change, run `npm run typecheck` (it regenerates route types).
 
@@ -140,12 +141,12 @@ Then rerun without the env var and confirm green.
 - `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`: shader contract text generation
 - `app/features/3d/random-walk-world/random-walk-world-page.tsx`: random-walk page + test API wiring
 - `app/features/3d/random-walk-world/random-walk-world-simulation.ts`: simulation orchestrator and frame stepping
+- `app/features/3d/random-walk-world/simulation/random-walk-parameter-runtime.ts`: seed resolution + realtime physics sync + frame progression assessment seams
 - `app/features/3d/random-walk-world/simulation/random-walk-simulation-contract.ts`: deterministic random-walk contract text generation
 - `app/features/3d/random-walk-world/simulation/random-walk-simulation-rng.ts`: seed hashing and deterministic RNG stepping
 - `app/features/3d/random-walk-world/random-walk-peer-influence.architecture.ts`: peer-influence architecture port entrypoint
 - `app/features/3d/random-walk-world/peer-influence/contracts.ts`: typed CH-004/005/005-A/008 contract and pseudocode artifacts
 - `app/features/3d/random-walk-world/peer-influence/runtime.ts`: peer-influence runtime derivation functions
-- `app/features/3d/random-walk-world/peer-influence/traceability.ts`: architecture pressure and loci mappings
 - `app/db/client-bridge/bridge.ts`: browser-to-worker persistence seam
 - `app/db/worker/messages.ts`: worker contract types
 - `app/db/worker/worker.ts`: request handling and SQLite runtime

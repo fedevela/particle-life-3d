@@ -3,7 +3,7 @@ export type Issue33RequirementId = "CH-004" | "CH-005" | "CH-005-A" | "CH-008";
 export type RequirementLogicObligation = {
   id: Issue33RequirementId;
   obligation: string;
-  verificationLocus: "tests/random-walk-world.traceability.phase-5.spec.ts";
+  verificationLocus: "tests/random-walk-world/random-walk-world.ui.spec.ts";
   owningPseudocodeLocus: "app/features/3d/random-walk-world/random-walk-peer-influence.pseudocode.ts";
   runtimeLoci: readonly string[];
   requirementCases: readonly string[];
@@ -14,7 +14,7 @@ export const ISSUE_33_LOGIC_OBLIGATIONS: readonly RequirementLogicObligation[] =
     id: "CH-004",
     obligation:
       "Each frame update applies ambient friction so velocity decays toward halt unless additional forces are introduced.",
-    verificationLocus: "tests/random-walk-world.traceability.phase-5.spec.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-world.ui.spec.ts",
     owningPseudocodeLocus:
       "app/features/3d/random-walk-world/random-walk-peer-influence.pseudocode.ts",
     runtimeLoci: [
@@ -31,7 +31,7 @@ export const ISSUE_33_LOGIC_OBLIGATIONS: readonly RequirementLogicObligation[] =
     id: "CH-005",
     obligation:
       "Peer influence processing computes average movement direction from neighbors found inside a configured 3D radius.",
-    verificationLocus: "tests/random-walk-world.traceability.phase-5.spec.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-world.ui.spec.ts",
     owningPseudocodeLocus:
       "app/features/3d/random-walk-world/random-walk-peer-influence.pseudocode.ts",
     runtimeLoci: [
@@ -47,7 +47,7 @@ export const ISSUE_33_LOGIC_OBLIGATIONS: readonly RequirementLogicObligation[] =
     id: "CH-005-A",
     obligation:
       "Simulation behavior remains toggleable so regular random-walk can be selected to preserve previous flows.",
-    verificationLocus: "tests/random-walk-world.traceability.phase-5.spec.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-world.ui.spec.ts",
     owningPseudocodeLocus:
       "app/features/3d/random-walk-world/random-walk-peer-influence.pseudocode.ts",
     runtimeLoci: [
@@ -64,7 +64,7 @@ export const ISSUE_33_LOGIC_OBLIGATIONS: readonly RequirementLogicObligation[] =
     id: "CH-008",
     obligation:
       "Random impulse direction is derived from both current velocity direction and peer-average direction within radius.",
-    verificationLocus: "tests/random-walk-world.traceability.phase-5.spec.ts",
+    verificationLocus: "tests/random-walk-world/random-walk-world.ui.spec.ts",
     owningPseudocodeLocus:
       "app/features/3d/random-walk-world/random-walk-peer-influence.pseudocode.ts",
     runtimeLoci: [
