@@ -18,18 +18,35 @@ async function waitForRandomWalkTestApis(page: Page) {
       return page.evaluate(() => ({
         hasGetContract: typeof window.__GET_RANDOM_WALK_CONTRACT_TEXT__ === "function",
       }));
-    })
+    }, { timeout: 15_000, intervals: [100, 250, 500] })
     .toEqual({ hasGetContract: true });
 }
 
 async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
-  return page.evaluate(async ({ targetTimeMs }: { targetTimeMs: number }) => {
-    if (typeof window.__GET_RANDOM_WALK_CONTRACT_TEXT__ !== "function") {
-      throw new Error("window.__GET_RANDOM_WALK_CONTRACT_TEXT__ is not available.");
-    }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.evaluate(async ({ targetTimeMs }: { targetTimeMs: number }) => {
+        if (typeof window.__GET_RANDOM_WALK_CONTRACT_TEXT__ !== "function") {
+          throw new Error("window.__GET_RANDOM_WALK_CONTRACT_TEXT__ is not available.");
+        }
 
-    return window.__GET_RANDOM_WALK_CONTRACT_TEXT__(targetTimeMs);
-  }, { targetTimeMs: timeMs });
+        return window.__GET_RANDOM_WALK_CONTRACT_TEXT__(targetTimeMs);
+      }, { targetTimeMs: timeMs });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isContextReset = message.includes("Execution context was destroyed");
+      const isApiUnavailable = message.includes("__GET_RANDOM_WALK_CONTRACT_TEXT__ is not available");
+      if ((!isContextReset && !isApiUnavailable) || attempt === 2) {
+        throw error;
+      }
+      if (isApiUnavailable) {
+        await waitForRandomWalkTestApis(page);
+      }
+      await page.waitForTimeout(100);
+    }
+  }
+
+  throw new Error("Failed to read random walk contract text after retries.");
 }
 
 async function wheelInput(input: Locator, deltaY: number) {
@@ -45,16 +62,24 @@ function getScenarioContractPath(scenario: string, timeMs: number) {
 }
 
 async function assertScenarioContracts(page: Page, scenario: string) {
+  if (SHOULD_UPDATE_CONTRACTS) {
+    const capturedContracts: Array<{ milestoneMs: number; actual: string }> = [];
+    for (const milestoneMs of CONTRACT_MILESTONES_MS) {
+      const actual = (await getRandomWalkContractAtTimeMs(page, milestoneMs)).trimEnd();
+      capturedContracts.push({ milestoneMs, actual });
+    }
+
+    for (const { milestoneMs, actual } of capturedContracts) {
+      const fixturePath = getScenarioContractPath(scenario, milestoneMs);
+      await mkdir(path.dirname(fixturePath), { recursive: true });
+      await writeFile(fixturePath, `${actual}\n`, "utf8");
+    }
+    return;
+  }
+
   for (const milestoneMs of CONTRACT_MILESTONES_MS) {
     const actual = (await getRandomWalkContractAtTimeMs(page, milestoneMs)).trimEnd();
     const fixturePath = getScenarioContractPath(scenario, milestoneMs);
-
-    if (SHOULD_UPDATE_CONTRACTS) {
-      await mkdir(path.dirname(fixturePath), { recursive: true });
-      await writeFile(fixturePath, `${actual}\n`, "utf8");
-      continue;
-    }
-
     const expected = (await readFile(fixturePath, "utf8")).trimEnd();
     expect(actual).toBe(expected);
   }
@@ -66,7 +91,7 @@ async function openRandomWalkControls(page: Page, seed: string) {
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
   if (!(await dotCountInput.isVisible())) {
-    const randomWalkLink = page.getByRole("link", { name: "Random Walk Sphere" });
+    const randomWalkLink = page.getByRole("link", { name: "Swarm Simulator" });
     await randomWalkLink.click();
   }
 
@@ -81,7 +106,7 @@ test("menu link opens random-walk scene and controls", async ({ page }) => {
 
   const links = page.locator("aside nav a");
   await expect(links).toHaveCount(3);
-  await expect(links.nth(2)).toContainText("Random Walk Sphere");
+  await expect(links.nth(2)).toContainText("Swarm Simulator");
 
   await links.nth(2).click();
   await expect(page).toHaveURL(/\/random-walk-world$/);
@@ -140,9 +165,9 @@ test("boundary extent input updates and clamps", async ({ page }) => {
   await expect(boundaryExtentInput).toHaveValue("0.25");
   await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=0.2500");
 
-  await boundaryExtentInput.fill("100");
-  await expect(boundaryExtentInput).toHaveValue("10.00");
-  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=10.0000");
+  await boundaryExtentInput.fill("9999");
+  await expect(boundaryExtentInput).toHaveValue("1000.00");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("boundary_extent=1000.0000");
   await assertScenarioContracts(page, "random-walk-world.ui-boundary-extent-clamp");
 });
 
@@ -157,15 +182,15 @@ test("wheel increments and decrements all controls", async ({ page }) => {
 
   const stepScaleInput = page.locator("#random-walk-world-stepScale");
   await wheelInput(stepScaleInput, -120);
-  await expect(stepScaleInput).toHaveValue("0.011");
+  await expect(stepScaleInput).toHaveValue("0.022");
   await wheelInput(stepScaleInput, 120);
-  await expect(stepScaleInput).toHaveValue("0.010");
+  await expect(stepScaleInput).toHaveValue("0.021");
 
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
   await wheelInput(boundaryExtentInput, -120);
-  await expect(boundaryExtentInput).toHaveValue("2.55");
+  await expect(boundaryExtentInput).toHaveValue("10.05");
   await wheelInput(boundaryExtentInput, 120);
-  await expect(boundaryExtentInput).toHaveValue("2.50");
+  await expect(boundaryExtentInput).toHaveValue("10.00");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-cycle");
 });
 
@@ -183,9 +208,9 @@ test("wheel respects min and max clamps", async ({ page }) => {
   await expect(stepScaleInput).toHaveValue("0.001");
 
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
-  await boundaryExtentInput.fill("10");
+  await boundaryExtentInput.fill("1000");
   await wheelInput(boundaryExtentInput, -120);
-  await expect(boundaryExtentInput).toHaveValue("10.00");
+  await expect(boundaryExtentInput).toHaveValue("1000.00");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
 
@@ -200,10 +225,13 @@ test("peer influence controls are toggle-gated and expose peer impulse scale", a
   await modeSelect.selectOption("peer-influenced-random-walk");
   const peerImpulseScaleInput = page.locator("#random-walk-world-peerImpulseScale");
   await expect(peerImpulseScaleInput).toBeVisible();
-  await expect(peerImpulseScaleInput).toHaveValue("0.15");
+  await expect(peerImpulseScaleInput).toHaveValue("1.00");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("mode=peer-influenced-random-walk");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("push_strength=1.0000");
 
   await peerImpulseScaleInput.fill("0.22");
   await expect(peerImpulseScaleInput).toHaveValue("0.22");
+  await expect.poll(async () => getRandomWalkContractAtTimeMs(page, 0)).toContain("push_strength=0.2200");
 });
 
 test("toroidal wrap preserves velocity vector", async () => {

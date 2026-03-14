@@ -22,6 +22,11 @@ import {
 } from "~/types/random-walk-world";
 import { useUiStore } from "~/state/ui-store";
 
+const RANDOM_WALK_MODE_LABELS: Record<(typeof RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS)[number], string> = {
+  "regular-random-walk": "Classic Random Walk",
+  "peer-influenced-random-walk": "Neighbor-Aware Walk",
+};
+
 function getDecimals(step: number) {
   const text = step.toString();
   const dotIndex = text.indexOf(".");
@@ -325,13 +330,13 @@ export default function DashboardShell() {
                       );
                     })}
                   </div>
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Issue #33 architecture seams</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Neighbor behavior controls</p>
                   <div className="space-y-2 border-t border-cyan-900/40 pt-2">
                     <div className="space-y-1">
                       <label
                         className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
                         htmlFor="random-walk-world-mode"
-                        title="Select physics mode to preserve regular random walk or enable peer-influence planning seams."
+                        title="Choose classic movement or movement that reacts to nearby neighbors."
                       >
                         Physics Mode
                       </label>
@@ -343,7 +348,7 @@ export default function DashboardShell() {
                       >
                         {RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.map((mode) => (
                           <option key={mode} value={mode}>
-                            {mode}
+                            {RANDOM_WALK_MODE_LABELS[mode]}
                           </option>
                         ))}
                       </select>
@@ -378,7 +383,7 @@ export default function DashboardShell() {
                       })
                     ) : (
                       <p className="text-[10px] uppercase tracking-[0.12em] text-cyan-300/90">
-                        Peer controls hidden in regular mode.
+                        Neighbor controls are hidden in Classic Random Walk mode.
                       </p>
                     )}
                   </div>

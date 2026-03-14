@@ -252,9 +252,15 @@ export class RandomWalkWorldSimulation {
   private buildContractText() {
     return buildRandomWalkContractText({
       frame: this.frame,
+      mode: this.physicsParams.mode,
       dotCount: this.params.dotCount,
       stepScale: this.params.stepScale,
       boundaryExtent: this.params.boundaryExtent,
+      ambientFriction: this.physicsParams.ambientFriction,
+      peerInfluenceRadius: this.physicsParams.peerInfluenceRadius,
+      velocityBiasWeight: this.physicsParams.velocityBiasWeight,
+      peerBiasWeight: this.physicsParams.peerBiasWeight,
+      peerImpulseScale: this.physicsParams.peerImpulseScale,
       positions: this.positions,
       velocities: this.velocities,
     });

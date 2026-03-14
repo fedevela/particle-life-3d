@@ -144,7 +144,12 @@ export const useUiStore = create<UiState>((set) => ({
     set({
       helloShaderWorldMovementParams: clampHelloShaderWorldMovementParams(nextParams),
     }),
-  randomWalkWorldParams: DEFAULT_RANDOM_WALK_WORLD_PARAMS,
+  randomWalkWorldParams: clampRandomWalkWorldParams({
+    ...DEFAULT_RANDOM_WALK_WORLD_PARAMS,
+    dotCount: 2048,
+    stepScale: 0.021,
+    boundaryExtent: 10,
+  }),
   setRandomWalkWorldParam: (key, rawValue) =>
     set((state) => ({
       randomWalkWorldParams: clampRandomWalkWorldParams({
@@ -156,7 +161,15 @@ export const useUiStore = create<UiState>((set) => ({
     set({
       randomWalkWorldParams: clampRandomWalkWorldParams(nextParams),
     }),
-  randomWalkWorldPhysicsParams: DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+  randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
+    ...DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+    mode: "regular-random-walk",
+    ambientFriction: 0,
+    peerInfluenceRadius: 2.75,
+    velocityBiasWeight: 1,
+    peerBiasWeight: 1,
+    peerImpulseScale: 1,
+  }),
   setRandomWalkWorldPhysicsMode: (mode) =>
     set((state) => ({
       randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({

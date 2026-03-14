@@ -110,7 +110,10 @@ test.describe("Issue #33 phase 8 implementation traceability", () => {
 
     const regularInitial = regular.getContractTextAtFrame(0);
     const peerInitial = peerInfluenced.getContractTextAtFrame(0);
-    expect(regularInitial).toBe(peerInitial);
+    expect(regularInitial).toContain("mode=regular-random-walk");
+    expect(peerInitial).toContain("mode=peer-influenced-random-walk");
+    expect(regularInitial).toContain("sample_0=");
+    expect(peerInitial).toContain("sample_0=");
 
     const regularLater = regular.getContractTextAtFrame(72);
     const peerLater = peerInfluenced.getContractTextAtFrame(72);

@@ -5,7 +5,7 @@ export const ISSUE_33_RANDOM_WALK_ARCH_REQUIREMENTS = ["CH-004", "CH-005", "CH-0
 
 /** Define the sidebar route label and path for the random-walk surface (CH-001). */
 export const RANDOM_WALK_WORLD_ROUTE_PATH = "/random-walk-world";
-export const RANDOM_WALK_WORLD_MENU_LABEL = "Random Walk Sphere";
+export const RANDOM_WALK_WORLD_MENU_LABEL = "Swarm Simulator";
 
 export type RandomWalkWorldParamKey = "dotCount" | "stepScale" | "boundaryExtent";
 
@@ -60,21 +60,21 @@ export const RANDOM_WALK_WORLD_PARAM_CONTROLS: Record<RandomWalkWorldParamKey, R
     min: 64,
     max: 65536,
     step: 64,
-    tooltip: "Number of dots participating in the random-walk simulation.",
+    tooltip: "How many dots are moving in the scene.",
   },
   stepScale: {
     label: "Step Scale",
     min: 0.001,
     max: 0.1,
     step: 0.001,
-    tooltip: "Distance scale applied to each random-walk integration step.",
+    tooltip: "How far each dot tries to move on every update.",
   },
   boundaryExtent: {
     label: "Boundary Extent",
     min: 0.25,
-    max: 10,
+    max: 1000,
     step: 0.05,
-    tooltip: "Half-width of the invisible toroidal cube boundary.",
+    tooltip: "How far dots can move from center before wrapping to the other side.",
   },
 };
 
@@ -98,45 +98,45 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
     min: 0,
     max: 1,
     step: 0.01,
-    tooltip: "Frame-level decay coefficient applied to velocity before new impulses are integrated.",
+    tooltip: "How quickly dots slow down when nothing pushes them.",
   },
   peerInfluenceRadius: {
     label: "Peer Radius",
     min: 0.05,
-    max: 10,
+    max: 50,
     step: 0.05,
-    tooltip: "3D distance threshold used for neighbor average-direction influence.",
+    tooltip: "How close other dots must be to count as neighbors.",
   },
   velocityBiasWeight: {
-    label: "Velocity Bias",
+    label: "Keep Direction",
     min: 0,
-    max: 1,
+    max: 2,
     step: 0.01,
-    tooltip: "Weight for current velocity direction when deriving dual-bias impulses.",
+    tooltip: "How much a dot prefers continuing in its current direction.",
   },
   peerBiasWeight: {
-    label: "Peer Bias",
+    label: "Follow Neighbors",
     min: 0,
-    max: 1,
+    max: 3,
     step: 0.01,
-    tooltip: "Weight for peer-average direction when deriving dual-bias impulses.",
+    tooltip: "How much a dot wants to move with nearby neighbors.",
   },
   peerImpulseScale: {
-    label: "Peer Impulse Scale",
+    label: "Push Strength",
     min: 0,
-    max: 1,
+    max: 2,
     step: 0.01,
-    tooltip: "Scale applied to peer-influenced impulse integration each frame.",
+    tooltip: "Overall strength of movement pushes each update.",
   },
 };
 
 export const DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS: RandomWalkWorldPhysicsParams = {
   mode: "regular-random-walk",
-  ambientFriction: 0.08,
-  peerInfluenceRadius: 1.2,
-  velocityBiasWeight: 0.5,
-  peerBiasWeight: 0.5,
-  peerImpulseScale: 0.15,
+  ambientFriction: 0.05,
+  peerInfluenceRadius: 2.4,
+  velocityBiasWeight: 0.25,
+  peerBiasWeight: 1.2,
+  peerImpulseScale: 0.45,
 };
 
 /** Clamp UI-provided random-walk control values to declared bounds (CH-001 integration seam). */

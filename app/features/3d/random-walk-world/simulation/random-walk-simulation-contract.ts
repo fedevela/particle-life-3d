@@ -3,6 +3,12 @@ type ContractSnapshotInput = {
   dotCount: number;
   stepScale: number;
   boundaryExtent: number;
+  mode: "regular-random-walk" | "peer-influenced-random-walk";
+  ambientFriction: number;
+  peerInfluenceRadius: number;
+  velocityBiasWeight: number;
+  peerBiasWeight: number;
+  peerImpulseScale: number;
   positions: Float32Array;
   velocities: Float32Array;
 };
@@ -64,9 +70,15 @@ export function buildRandomWalkContractText(snapshot: ContractSnapshotInput) {
   const bodyLines = [
     "[random-walk]",
     `frame=${snapshot.frame}`,
+    `mode=${snapshot.mode}`,
     `dot_count=${snapshot.dotCount}`,
     `step_scale=${formatScalar(snapshot.stepScale)}`,
     `boundary_extent=${formatScalar(snapshot.boundaryExtent)}`,
+    `ambient_friction=${formatScalar(snapshot.ambientFriction)}`,
+    `peer_radius=${formatScalar(snapshot.peerInfluenceRadius)}`,
+    `keep_direction=${formatScalar(snapshot.velocityBiasWeight)}`,
+    `follow_neighbors=${formatScalar(snapshot.peerBiasWeight)}`,
+    `push_strength=${formatScalar(snapshot.peerImpulseScale)}`,
     `avg_x=${formatScalar(sumX / safeDotCount)}`,
     `avg_y=${formatScalar(sumY / safeDotCount)}`,
     `avg_z=${formatScalar(sumZ / safeDotCount)}`,
