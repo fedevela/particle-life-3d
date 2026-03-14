@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { createRandomWalkToroidalPhysicsPort } from "../../app/features/3d/random-walk-world/random-walk-world-physics-seam";
 
@@ -30,6 +30,10 @@ async function getRandomWalkContractAtTimeMs(page: Page, timeMs = 0) {
 
     return window.__GET_RANDOM_WALK_CONTRACT_TEXT__(targetTimeMs);
   }, { targetTimeMs: timeMs });
+}
+
+async function wheelInput(input: Locator, deltaY: number) {
+  await input.dispatchEvent("wheel", { deltaY });
 }
 
 function getScenarioContractPath(scenario: string, timeMs: number) {
@@ -146,24 +150,21 @@ test("wheel increments and decrements all controls", async ({ page }) => {
   await openRandomWalkControls(page, "random-walk-wheel-controls");
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
-  await dotCountInput.hover();
-  await page.mouse.wheel(0, -120);
+  await wheelInput(dotCountInput, -120);
   await expect(dotCountInput).toHaveValue("2112");
-  await page.mouse.wheel(0, 120);
+  await wheelInput(dotCountInput, 120);
   await expect(dotCountInput).toHaveValue("2048");
 
   const stepScaleInput = page.locator("#random-walk-world-stepScale");
-  await stepScaleInput.hover();
-  await page.mouse.wheel(0, -120);
+  await wheelInput(stepScaleInput, -120);
   await expect(stepScaleInput).toHaveValue("0.011");
-  await page.mouse.wheel(0, 120);
+  await wheelInput(stepScaleInput, 120);
   await expect(stepScaleInput).toHaveValue("0.010");
 
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
-  await boundaryExtentInput.hover();
-  await page.mouse.wheel(0, -120);
+  await wheelInput(boundaryExtentInput, -120);
   await expect(boundaryExtentInput).toHaveValue("2.55");
-  await page.mouse.wheel(0, 120);
+  await wheelInput(boundaryExtentInput, 120);
   await expect(boundaryExtentInput).toHaveValue("2.50");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-cycle");
 });
@@ -173,20 +174,17 @@ test("wheel respects min and max clamps", async ({ page }) => {
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
   await dotCountInput.fill("65536");
-  await dotCountInput.hover();
-  await page.mouse.wheel(0, -120);
+  await wheelInput(dotCountInput, -120);
   await expect(dotCountInput).toHaveValue("65536");
 
   const stepScaleInput = page.locator("#random-walk-world-stepScale");
   await stepScaleInput.fill("0.001");
-  await stepScaleInput.hover();
-  await page.mouse.wheel(0, 120);
+  await wheelInput(stepScaleInput, 120);
   await expect(stepScaleInput).toHaveValue("0.001");
 
   const boundaryExtentInput = page.locator("#random-walk-world-boundaryExtent");
   await boundaryExtentInput.fill("10");
-  await boundaryExtentInput.hover();
-  await page.mouse.wheel(0, -120);
+  await wheelInput(boundaryExtentInput, -120);
   await expect(boundaryExtentInput).toHaveValue("10.00");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
