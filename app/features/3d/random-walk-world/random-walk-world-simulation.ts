@@ -1,9 +1,12 @@
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
 import {
+  createNeighborSpatialIndex,
   deriveAmbientFrictionDecayPlan,
   deriveDualBiasImpulseDirectionPlan,
   deriveFrameUpdatePlan,
-  deriveNeighborAverageDirectionPlan,
+  deriveNeighborCohesionDirectionFromSpatialIndex,
+  deriveNeighborAverageDirectionFromSpatialIndex,
+  deriveNeighborSeparationDirectionFromSpatialIndex,
 } from "~/features/3d/random-walk-world/peer-influence/runtime";
 import { buildRandomWalkContractText } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-contract";
 import {
@@ -21,6 +24,7 @@ import {
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
 const REGULAR_IMPULSE_SCALE_FACTOR = 0.15;
+const MASS_VARIANCE_MAX = 0.95;
 
 function normalizeDirection(x: number, y: number, z: number): [number, number, number] {
   const length = Math.hypot(x, y, z);
@@ -31,6 +35,24 @@ function normalizeDirection(x: number, y: number, z: number): [number, number, n
   return [x / length, y / length, z / length];
 }
 
+function hashIndexNoise(seed: string, dotIndex: number) {
+  let hash = hashSeed(seed) ^ Math.imul(dotIndex + 1, 2654435761);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 2246822519);
+  hash ^= hash >>> 13;
+  return (hash >>> 0) / 4294967295;
+}
+
+function deriveMassFactorFromNoise(massNoise: number, massVariance: number) {
+  const normalizedVariance = Math.min(MASS_VARIANCE_MAX, Math.max(0, massVariance));
+  if (normalizedVariance <= 0) {
+    return 1;
+  }
+
+  const centeredNoise = massNoise * 2 - 1;
+  return Math.max(0.05, 1 + centeredNoise * normalizedVariance);
+}
+
 export function getRandomWalkFrameForTimeMs(timeMs: number) {
   if (!Number.isFinite(timeMs) || timeMs < 0) {
     return 0;
@@ -39,12 +61,87 @@ export function getRandomWalkFrameForTimeMs(timeMs: number) {
   return Math.round(timeMs / RANDOM_WALK_FRAME_DURATION_MS);
 }
 
+type BoundaryTransitionInput = {
+  nextPosition: readonly [number, number, number];
+  velocity: readonly [number, number, number];
+  boundaryExtent: number;
+  boundaryMode: RandomWalkWorldPhysicsParams["boundaryMode"];
+  physicsPort: ReturnType<typeof createRandomWalkToroidalPhysicsPort>;
+};
+
+function applyBoundaryTransition(input: BoundaryTransitionInput) {
+  const boundary = {
+    min: [-input.boundaryExtent, -input.boundaryExtent, -input.boundaryExtent] as const,
+    max: [input.boundaryExtent, input.boundaryExtent, input.boundaryExtent] as const,
+  };
+
+  if (input.boundaryMode === "wrap-around") {
+    return input.physicsPort.deriveToroidalWrapTransition(
+      {
+        position: input.nextPosition,
+        velocity: input.velocity,
+      },
+      boundary,
+    );
+  }
+
+  let x = input.nextPosition[0];
+  let y = input.nextPosition[1];
+  let z = input.nextPosition[2];
+  let vx = input.velocity[0];
+  let vy = input.velocity[1];
+  let vz = input.velocity[2];
+  let wrapOccurred = false;
+
+  const min = -input.boundaryExtent;
+  const max = input.boundaryExtent;
+  const axes = [
+    { position: x, velocity: vx },
+    { position: y, velocity: vy },
+    { position: z, velocity: vz },
+  ];
+
+  for (let axisIndex = 0; axisIndex < axes.length; axisIndex += 1) {
+    const axis = axes[axisIndex];
+    if (axis.position < min || axis.position > max) {
+      wrapOccurred = true;
+
+      if (input.boundaryMode === "bounce-back") {
+        if (axis.position < min) {
+          axis.position = min + (min - axis.position);
+        } else {
+          axis.position = max - (axis.position - max);
+        }
+        axis.position = Math.min(max, Math.max(min, axis.position));
+        axis.velocity *= -1;
+      } else {
+        axis.position = Math.min(max, Math.max(min, axis.position));
+        axis.velocity = 0;
+      }
+    }
+  }
+
+  x = axes[0].position;
+  y = axes[1].position;
+  z = axes[2].position;
+  vx = axes[0].velocity;
+  vy = axes[1].velocity;
+  vz = axes[2].velocity;
+
+  return {
+    wrapOccurred,
+    nextPosition: [x, y, z] as const,
+    preservedVelocity: [vx, vy, vz] as const,
+  };
+}
+
 export class RandomWalkWorldSimulation {
   private readonly params: RandomWalkWorldParams;
   private physicsParams: RandomWalkWorldPhysicsParams;
   private readonly seed: string;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
+  private readonly massNoiseByDot: Float32Array;
   private readonly captureContractFrames: boolean;
   private readonly contractsByFrame = new Map<number, string>();
   private readonly physicsPort = createRandomWalkToroidalPhysicsPort();
@@ -65,7 +162,9 @@ export class RandomWalkWorldSimulation {
     this.captureContractFrames = captureContractFrames;
     this.positions = new Float32Array(params.dotCount * 3);
     this.velocities = new Float32Array(params.dotCount * 3);
+    this.massNoiseByDot = new Float32Array(params.dotCount);
     this.rngState = hashSeed(seed);
+    this.initializeMassNoise();
     this.initializeState();
     this.captureFrameContract(0);
   }
@@ -81,8 +180,8 @@ export class RandomWalkWorldSimulation {
   public stepFrame() {
     if (
       shouldApplyRealtimePhysicsParams({
-      latestUiPhysicsParamsVersion: this.physicsParamsVersion,
-      lastAppliedPhysicsParamsVersion: this.lastAppliedPhysicsParamsVersion,
+        latestUiPhysicsParamsVersion: this.physicsParamsVersion,
+        lastAppliedPhysicsParamsVersion: this.lastAppliedPhysicsParamsVersion,
       })
     ) {
       this.lastAppliedPhysicsParamsVersion = this.physicsParamsVersion;
@@ -97,32 +196,27 @@ export class RandomWalkWorldSimulation {
       peerBiasWeight: this.physicsParams.peerBiasWeight,
     });
 
-    const boundary = {
-      min: [-this.params.boundaryExtent, -this.params.boundaryExtent, -this.params.boundaryExtent] as const,
-      max: [this.params.boundaryExtent, this.params.boundaryExtent, this.params.boundaryExtent] as const,
-    };
-    const maxSpeed = this.params.stepScale * 3;
+    const maxSpeed = this.params.stepScale * this.physicsParams.maxSpeedMultiplier;
     let previousSpeedTotal = 0;
     let nextSpeedTotal = 0;
     let wrapOccurred = false;
-    const frameDots =
+    const neighborSpatialIndex =
       framePlan.mode === "peer-influenced-random-walk"
-        ? Array.from({ length: this.params.dotCount }, (_, dotIndex) => {
-            const offset = dotIndex * 3;
-            return {
-              dotIndex,
-              position: [
-                this.positions[offset],
-                this.positions[offset + 1],
-                this.positions[offset + 2],
-              ] as const,
-              velocity: [
-                this.velocities[offset],
-                this.velocities[offset + 1],
-                this.velocities[offset + 2],
-              ] as const,
-            };
-          })
+        ? createNeighborSpatialIndex(
+            this.positions,
+            this.velocities,
+            this.params.dotCount,
+            this.physicsParams.peerInfluenceRadius,
+          )
+        : null;
+    const separationSpatialIndex =
+      framePlan.mode === "peer-influenced-random-walk"
+        ? createNeighborSpatialIndex(
+            this.positions,
+            this.velocities,
+            this.params.dotCount,
+            this.physicsParams.separationRadius,
+          )
         : null;
 
     for (let index = 0; index < this.params.dotCount; index += 1) {
@@ -140,17 +234,33 @@ export class RandomWalkWorldSimulation {
         const friction = deriveAmbientFrictionDecayPlan({
           velocity: [vx, vy, vz],
           frictionFactor: normalizedFriction,
+          dampingCurve: this.physicsParams.velocityDampingCurve,
         });
         vx = friction.decayedVelocity[0];
         vy = friction.decayedVelocity[1];
         vz = friction.decayedVelocity[2];
 
         const velocityDirection = normalizeDirection(vx, vy, vz);
-        const neighborAggregate = deriveNeighborAverageDirectionPlan({
-          subjectDotIndex: index,
-          neighborRadius: this.physicsParams.peerInfluenceRadius,
-          frameDots: frameDots ?? [],
-        });
+        const neighborAggregate = deriveNeighborAverageDirectionFromSpatialIndex(
+          index,
+          neighborSpatialIndex,
+          this.physicsParams.neighborCountCap,
+        );
+        const neighborCohesionDirection = deriveNeighborCohesionDirectionFromSpatialIndex(
+          index,
+          neighborSpatialIndex,
+          this.physicsParams.neighborCountCap,
+        );
+        const neighborSeparationDirection = deriveNeighborSeparationDirectionFromSpatialIndex(
+          index,
+          separationSpatialIndex,
+          this.physicsParams.neighborCountCap,
+        );
+        const centerAttractionDirection = normalizeDirection(
+          -this.positions[offset],
+          -this.positions[offset + 1],
+          -this.positions[offset + 2],
+        );
         const randomDirection = normalizeDirection(
           this.nextSignedRandom(),
           this.nextSignedRandom(),
@@ -160,13 +270,24 @@ export class RandomWalkWorldSimulation {
           randomUnitDirection: randomDirection,
           currentVelocityDirection: velocityDirection,
           peerAverageDirection: neighborAggregate.averageDirection,
+          peerCohesionDirection: neighborCohesionDirection,
+          peerSeparationDirection: neighborSeparationDirection,
+          centerAttractionDirection,
+          randomImpulseWeight: this.physicsParams.randomImpulseWeight,
           velocityBiasWeight: this.physicsParams.velocityBiasWeight,
           peerBiasWeight: this.physicsParams.peerBiasWeight,
+          peerCohesionWeight: this.physicsParams.neighborCohesionWeight,
+          peerSeparationWeight: this.physicsParams.separationWeight,
+          centerAttractionWeight: this.physicsParams.centerAttraction,
         });
-
-        vx += impulseDirection.biasedDirection[0] * this.params.stepScale * this.physicsParams.peerImpulseScale;
-        vy += impulseDirection.biasedDirection[1] * this.params.stepScale * this.physicsParams.peerImpulseScale;
-        vz += impulseDirection.biasedDirection[2] * this.params.stepScale * this.physicsParams.peerImpulseScale;
+        const massFactor = deriveMassFactorFromNoise(
+          this.massNoiseByDot[index],
+          this.physicsParams.massVariance,
+        );
+        const impulseScale = (this.params.stepScale * this.physicsParams.peerImpulseScale) / massFactor;
+        vx += impulseDirection.biasedDirection[0] * impulseScale;
+        vy += impulseDirection.biasedDirection[1] * impulseScale;
+        vz += impulseDirection.biasedDirection[2] * impulseScale;
       }
 
       const speed = Math.hypot(vx, vy, vz);
@@ -177,17 +298,17 @@ export class RandomWalkWorldSimulation {
         vz *= ratio;
       }
 
-      const transition = this.physicsPort.deriveToroidalWrapTransition(
-        {
-          position: [
-            this.positions[offset] + vx,
-            this.positions[offset + 1] + vy,
-            this.positions[offset + 2] + vz,
-          ],
-          velocity: [vx, vy, vz],
-        },
-        boundary,
-      );
+      const transition = applyBoundaryTransition({
+        nextPosition: [
+          this.positions[offset] + vx,
+          this.positions[offset + 1] + vy,
+          this.positions[offset + 2] + vz,
+        ],
+        velocity: [vx, vy, vz],
+        boundaryExtent: this.params.boundaryExtent,
+        boundaryMode: this.physicsParams.boundaryMode,
+        physicsPort: this.physicsPort,
+      });
       wrapOccurred = wrapOccurred || transition.wrapOccurred;
 
       this.positions[offset] = transition.nextPosition[0];
@@ -268,6 +389,12 @@ export class RandomWalkWorldSimulation {
     }
   }
 
+  private initializeMassNoise() {
+    for (let index = 0; index < this.params.dotCount; index += 1) {
+      this.massNoiseByDot[index] = hashIndexNoise(this.seed, index);
+    }
+  }
+
   private nextRandom() {
     const { nextState, value } = nextRandomFromState(this.rngState);
     this.rngState = nextState;
@@ -294,13 +421,23 @@ export class RandomWalkWorldSimulation {
     return buildRandomWalkContractText({
       frame: this.frame,
       mode: this.physicsParams.mode,
+      boundaryMode: this.physicsParams.boundaryMode,
       dotCount: this.params.dotCount,
       stepScale: this.params.stepScale,
       boundaryExtent: this.params.boundaryExtent,
       ambientFriction: this.physicsParams.ambientFriction,
       peerInfluenceRadius: this.physicsParams.peerInfluenceRadius,
+      randomImpulseWeight: this.physicsParams.randomImpulseWeight,
+      separationWeight: this.physicsParams.separationWeight,
+      separationRadius: this.physicsParams.separationRadius,
+      maxSpeedMultiplier: this.physicsParams.maxSpeedMultiplier,
+      velocityDampingCurve: this.physicsParams.velocityDampingCurve,
+      neighborCountCap: this.physicsParams.neighborCountCap,
+      centerAttraction: this.physicsParams.centerAttraction,
+      massVariance: this.physicsParams.massVariance,
       velocityBiasWeight: this.physicsParams.velocityBiasWeight,
       peerBiasWeight: this.physicsParams.peerBiasWeight,
+      neighborCohesionWeight: this.physicsParams.neighborCohesionWeight,
       peerImpulseScale: this.physicsParams.peerImpulseScale,
       positions: this.positions,
       velocities: this.velocities,

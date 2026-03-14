@@ -103,6 +103,7 @@ export type NeighborAggregateOutput = {
 export type AmbientFrictionInput = {
   velocity: SimulationVector3;
   frictionFactor: number;
+  dampingCurve: number;
 };
 
 export type AmbientFrictionOutput = {
@@ -114,8 +115,15 @@ export type DualBiasImpulseInput = {
   randomUnitDirection: SimulationVector3;
   currentVelocityDirection: SimulationVector3;
   peerAverageDirection: SimulationVector3;
+  peerCohesionDirection: SimulationVector3;
+  peerSeparationDirection: SimulationVector3;
+  centerAttractionDirection: SimulationVector3;
+  randomImpulseWeight: number;
   velocityBiasWeight: number;
   peerBiasWeight: number;
+  peerCohesionWeight: number;
+  peerSeparationWeight: number;
+  centerAttractionWeight: number;
 };
 
 export type DualBiasImpulseOutput = {

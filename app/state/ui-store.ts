@@ -8,6 +8,7 @@ import {
   type HelloShaderWorldMovementParams,
 } from "~/types/hello-shader-world-movement";
 import {
+  RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS,
   clampRandomWalkWorldPhysicsParams,
   clampRandomWalkWorldParams,
   DEFAULT_RANDOM_WALK_WORLD_SEED_INPUT,
@@ -15,6 +16,7 @@ import {
   DEFAULT_RANDOM_WALK_WORLD_PARAMS,
   RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS,
   type RandomWalkPhysicsMode,
+  type RandomWalkBoundaryMode,
   type RandomWalkWorldPhysicsParamKey,
   type RandomWalkWorldPhysicsParams,
   RANDOM_WALK_WORLD_PARAM_CONTROLS,
@@ -96,6 +98,7 @@ type UiState = {
   setRandomWalkWorldSeedInput: (nextSeed: string) => void;
   randomWalkWorldPhysicsParams: RandomWalkWorldPhysicsParams;
   setRandomWalkWorldPhysicsMode: (mode: RandomWalkPhysicsMode) => void;
+  setRandomWalkWorldBoundaryMode: (boundaryMode: RandomWalkBoundaryMode) => void;
   setRandomWalkWorldPhysicsParam: (key: RandomWalkWorldPhysicsParamKey, rawValue: string) => void;
   setRandomWalkWorldPhysicsParams: (nextParams: RandomWalkWorldPhysicsParams) => void;
 };
@@ -173,10 +176,20 @@ export const useUiStore = create<UiState>((set) => ({
   randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
     ...DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
     mode: "regular-random-walk",
+    boundaryMode: "wrap-around",
     ambientFriction: 0,
     peerInfluenceRadius: 2.75,
+    randomImpulseWeight: 1,
+    separationWeight: 0.8,
+    separationRadius: 0.7,
+    maxSpeedMultiplier: 3,
+    velocityDampingCurve: 1,
+    neighborCountCap: 64,
+    centerAttraction: 0,
+    massVariance: 0,
     velocityBiasWeight: 1,
     peerBiasWeight: 1,
+    neighborCohesionWeight: 0,
     peerImpulseScale: 1,
   }),
   setRandomWalkWorldPhysicsMode: (mode) =>
@@ -184,6 +197,15 @@ export const useUiStore = create<UiState>((set) => ({
       randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
         ...state.randomWalkWorldPhysicsParams,
         mode,
+      }),
+    })),
+  setRandomWalkWorldBoundaryMode: (boundaryMode) =>
+    set((state) => ({
+      randomWalkWorldPhysicsParams: clampRandomWalkWorldPhysicsParams({
+        ...state.randomWalkWorldPhysicsParams,
+        boundaryMode: RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS.includes(boundaryMode)
+          ? boundaryMode
+          : "wrap-around",
       }),
     })),
   setRandomWalkWorldPhysicsParam: (key, rawValue) =>

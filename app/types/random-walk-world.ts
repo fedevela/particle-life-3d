@@ -24,16 +24,27 @@ export type RandomWalkWorldSeedControl = {
 };
 
 export type RandomWalkPhysicsMode = "regular-random-walk" | "peer-influenced-random-walk";
+export type RandomWalkBoundaryMode = "wrap-around" | "bounce-back" | "edge-trap";
 
 export type RandomWalkWorldPhysicsParamKey =
   | "ambientFriction"
   | "peerInfluenceRadius"
+  | "randomImpulseWeight"
+  | "separationWeight"
+  | "separationRadius"
+  | "maxSpeedMultiplier"
+  | "velocityDampingCurve"
+  | "neighborCountCap"
+  | "centerAttraction"
+  | "massVariance"
   | "velocityBiasWeight"
   | "peerBiasWeight"
+  | "neighborCohesionWeight"
   | "peerImpulseScale";
 
 export type RandomWalkWorldPhysicsParams = {
   mode: RandomWalkPhysicsMode;
+  boundaryMode: RandomWalkBoundaryMode;
 } & Record<RandomWalkWorldPhysicsParamKey, number>;
 
 export type RandomWalkWorldPhysicsParamControl = {
@@ -53,8 +64,17 @@ export const RANDOM_WALK_WORLD_PARAM_ORDER: readonly RandomWalkWorldParamKey[] =
 export const RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER: readonly RandomWalkWorldPhysicsParamKey[] = [
   "ambientFriction",
   "peerInfluenceRadius",
+  "randomImpulseWeight",
+  "separationWeight",
+  "separationRadius",
+  "maxSpeedMultiplier",
+  "velocityDampingCurve",
+  "neighborCountCap",
+  "centerAttraction",
+  "massVariance",
   "velocityBiasWeight",
   "peerBiasWeight",
+  "neighborCohesionWeight",
   "peerImpulseScale",
 ] as const;
 
@@ -98,6 +118,11 @@ export const RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS: readonly RandomWalkPhysicsM
   "regular-random-walk",
   "peer-influenced-random-walk",
 ] as const;
+export const RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS: readonly RandomWalkBoundaryMode[] = [
+  "wrap-around",
+  "bounce-back",
+  "edge-trap",
+] as const;
 
 export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
   RandomWalkWorldPhysicsParamKey,
@@ -117,19 +142,82 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
     step: 0.05,
     tooltip: "How close other dots must be to count as neighbors.",
   },
+  randomImpulseWeight: {
+    label: "Wander Energy",
+    min: 0,
+    max: 3,
+    step: 0.01,
+    tooltip: "How much unpredictable motion each dot keeps.",
+  },
+  separationWeight: {
+    label: "Personal Space Strength",
+    min: 0,
+    max: 3,
+    step: 0.01,
+    tooltip: "How strongly nearby dots push each other away at close range.",
+  },
+  separationRadius: {
+    label: "Personal Space Radius",
+    min: 0.01,
+    max: 25,
+    step: 0.01,
+    tooltip: "How close dots can get before they start pushing apart.",
+  },
+  maxSpeedMultiplier: {
+    label: "Top Speed Limit",
+    min: 0.25,
+    max: 12,
+    step: 0.01,
+    tooltip: "Hard cap for movement speed, scaled by Step Scale.",
+  },
+  velocityDampingCurve: {
+    label: "Braking Curve",
+    min: 0.25,
+    max: 4,
+    step: 0.01,
+    tooltip: "How sharply friction slows motion over time.",
+  },
+  neighborCountCap: {
+    label: "Neighbor Attention",
+    min: 1,
+    max: 256,
+    step: 1,
+    tooltip: "Maximum nearby dots each dot reacts to per frame.",
+  },
+  centerAttraction: {
+    label: "Center Pull",
+    min: 0,
+    max: 3,
+    step: 0.01,
+    tooltip: "How strongly dots are drawn toward the scene center.",
+  },
+  massVariance: {
+    label: "Mass Diversity",
+    min: 0,
+    max: 0.95,
+    step: 0.01,
+    tooltip: "How much heavier and lighter dots differ from each other.",
+  },
   velocityBiasWeight: {
-    label: "Keep Direction",
+    label: "Momentum Memory",
     min: 0,
     max: 3,
     step: 0.01,
     tooltip: "How much a dot prefers continuing in its current direction.",
   },
   peerBiasWeight: {
-    label: "Follow Neighbors",
+    label: "Group Alignment",
     min: 0,
     max: 3,
     step: 0.01,
     tooltip: "How much a dot wants to move with nearby neighbors.",
+  },
+  neighborCohesionWeight: {
+    label: "Collapse Pull",
+    min: 0,
+    max: 3,
+    step: 0.01,
+    tooltip: "How strongly dots pull toward nearby neighbors to form tighter clumps.",
   },
   peerImpulseScale: {
     label: "Push Strength",
@@ -142,10 +230,20 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
 
 export const DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS: RandomWalkWorldPhysicsParams = {
   mode: "regular-random-walk",
+  boundaryMode: "wrap-around",
   ambientFriction: 0.05,
   peerInfluenceRadius: 2.4,
+  randomImpulseWeight: 1,
+  separationWeight: 0.8,
+  separationRadius: 0.7,
+  maxSpeedMultiplier: 3,
+  velocityDampingCurve: 1,
+  neighborCountCap: 64,
+  centerAttraction: 0,
+  massVariance: 0,
   velocityBiasWeight: 0.25,
   peerBiasWeight: 1.2,
+  neighborCohesionWeight: 0,
   peerImpulseScale: 0.45,
 };
 
@@ -174,6 +272,9 @@ export function clampRandomWalkWorldPhysicsParams(
 ): RandomWalkWorldPhysicsParams {
   return {
     mode: RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.includes(params.mode) ? params.mode : "regular-random-walk",
+    boundaryMode: RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS.includes(params.boundaryMode)
+      ? params.boundaryMode
+      : "wrap-around",
     ambientFriction: Math.min(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.ambientFriction.max,
       Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.ambientFriction.min, params.ambientFriction),
@@ -182,6 +283,43 @@ export function clampRandomWalkWorldPhysicsParams(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerInfluenceRadius.max,
       Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerInfluenceRadius.min, params.peerInfluenceRadius),
     ),
+    randomImpulseWeight: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.randomImpulseWeight.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.randomImpulseWeight.min, params.randomImpulseWeight),
+    ),
+    separationWeight: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.separationWeight.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.separationWeight.min, params.separationWeight),
+    ),
+    separationRadius: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.separationRadius.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.separationRadius.min, params.separationRadius),
+    ),
+    maxSpeedMultiplier: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.maxSpeedMultiplier.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.maxSpeedMultiplier.min, params.maxSpeedMultiplier),
+    ),
+    velocityDampingCurve: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.velocityDampingCurve.max,
+      Math.max(
+        RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.velocityDampingCurve.min,
+        params.velocityDampingCurve,
+      ),
+    ),
+    neighborCountCap: Math.round(
+      Math.min(
+        RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCountCap.max,
+        Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCountCap.min, params.neighborCountCap),
+      ),
+    ),
+    centerAttraction: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.centerAttraction.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.centerAttraction.min, params.centerAttraction),
+    ),
+    massVariance: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.massVariance.max,
+      Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.massVariance.min, params.massVariance),
+    ),
     velocityBiasWeight: Math.min(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.velocityBiasWeight.max,
       Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.velocityBiasWeight.min, params.velocityBiasWeight),
@@ -189,6 +327,13 @@ export function clampRandomWalkWorldPhysicsParams(
     peerBiasWeight: Math.min(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerBiasWeight.max,
       Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerBiasWeight.min, params.peerBiasWeight),
+    ),
+    neighborCohesionWeight: Math.min(
+      RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCohesionWeight.max,
+      Math.max(
+        RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCohesionWeight.min,
+        params.neighborCohesionWeight,
+      ),
     ),
     peerImpulseScale: Math.min(
       RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.peerImpulseScale.max,

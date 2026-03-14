@@ -10,6 +10,7 @@ import {
   type HelloShaderWorldMovementParamKey,
 } from "~/types/hello-shader-world-movement";
 import {
+  RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS,
   RANDOM_WALK_WORLD_SEED_CONTROL,
   RANDOM_WALK_WORLD_SEED_INPUT_ID,
   RANDOM_WALK_WORLD_MENU_LABEL,
@@ -27,6 +28,11 @@ import { useUiStore } from "~/state/ui-store";
 const RANDOM_WALK_MODE_LABELS: Record<(typeof RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS)[number], string> = {
   "regular-random-walk": "Classic Random Walk",
   "peer-influenced-random-walk": "Neighbor-Aware Walk",
+};
+const RANDOM_WALK_BOUNDARY_MODE_LABELS: Record<(typeof RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS)[number], string> = {
+  "wrap-around": "Wrap Around",
+  "bounce-back": "Bounce Back",
+  "edge-trap": "Edge Trap",
 };
 
 function getDecimals(step: number) {
@@ -90,6 +96,7 @@ export default function DashboardShell() {
   const setRandomWalkWorldSeedInput = useUiStore((state) => state.setRandomWalkWorldSeedInput);
   const randomWalkWorldPhysicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
   const setRandomWalkWorldPhysicsMode = useUiStore((state) => state.setRandomWalkWorldPhysicsMode);
+  const setRandomWalkWorldBoundaryMode = useUiStore((state) => state.setRandomWalkWorldBoundaryMode);
   const setRandomWalkWorldPhysicsParam = useUiStore((state) => state.setRandomWalkWorldPhysicsParam);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -304,7 +311,7 @@ export default function DashboardShell() {
 
               {isExpanded && isRandomWalkWorldSubmenuOpen ? (
                 <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Issue #32 and #34 controls</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Simulation Controls</p>
                   <div className="space-y-1 border-t border-cyan-900/40 pt-2">
                     <label
                       className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
@@ -371,6 +378,29 @@ export default function DashboardShell() {
                         {RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.map((mode) => (
                           <option key={mode} value={mode}>
                             {RANDOM_WALK_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                        htmlFor="random-walk-world-boundaryMode"
+                        title="Choose how dots behave when they reach the world edge."
+                      >
+                        Edge Behavior
+                      </label>
+                      <select
+                        id="random-walk-world-boundaryMode"
+                        value={randomWalkWorldPhysicsParams.boundaryMode}
+                        onChange={(event) =>
+                          setRandomWalkWorldBoundaryMode(event.target.value as typeof randomWalkWorldPhysicsParams.boundaryMode)
+                        }
+                        className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                      >
+                        {RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS.map((boundaryMode) => (
+                          <option key={boundaryMode} value={boundaryMode}>
+                            {RANDOM_WALK_BOUNDARY_MODE_LABELS[boundaryMode]}
                           </option>
                         ))}
                       </select>

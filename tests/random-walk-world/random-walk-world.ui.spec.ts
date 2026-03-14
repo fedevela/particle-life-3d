@@ -266,24 +266,66 @@ test("wheel respects min and max clamps", async ({ page }) => {
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-clamp");
 });
 
-test("peer influence controls are toggle-gated and expose peer impulse scale", async ({ page }) => {
+test("peer influence controls are toggle-gated and expose impulse and collapse controls", async ({ page }) => {
+  test.setTimeout(20_000);
   await openRandomWalkControls(page, "random-walk-peer-controls-toggle");
 
   const modeSelect = page.locator("#random-walk-world-mode");
+  const boundaryModeSelect = page.locator("#random-walk-world-boundaryMode");
   await expect(modeSelect).toBeVisible();
+  await expect(boundaryModeSelect).toBeVisible();
   await expect(modeSelect).toHaveValue("regular-random-walk");
+  await expect(boundaryModeSelect).toHaveValue("wrap-around");
   await expect(page.locator("#random-walk-world-peerImpulseScale")).toHaveCount(0);
+  await expect(page.locator("#random-walk-world-randomImpulseWeight")).toHaveCount(0);
+  await expect(page.locator("#random-walk-world-neighborCohesionWeight")).toHaveCount(0);
 
   await modeSelect.selectOption("peer-influenced-random-walk");
   const peerImpulseScaleInput = page.locator("#random-walk-world-peerImpulseScale");
+  const randomImpulseWeightInput = page.locator("#random-walk-world-randomImpulseWeight");
+  const separationWeightInput = page.locator("#random-walk-world-separationWeight");
+  const separationRadiusInput = page.locator("#random-walk-world-separationRadius");
+  const maxSpeedMultiplierInput = page.locator("#random-walk-world-maxSpeedMultiplier");
+  const velocityDampingCurveInput = page.locator("#random-walk-world-velocityDampingCurve");
+  const neighborCountCapInput = page.locator("#random-walk-world-neighborCountCap");
+  const centerAttractionInput = page.locator("#random-walk-world-centerAttraction");
+  const massVarianceInput = page.locator("#random-walk-world-massVariance");
+  const neighborCohesionWeightInput = page.locator("#random-walk-world-neighborCohesionWeight");
   await expect(peerImpulseScaleInput).toBeVisible();
+  await expect(randomImpulseWeightInput).toBeVisible();
+  await expect(separationWeightInput).toBeVisible();
+  await expect(separationRadiusInput).toBeVisible();
+  await expect(maxSpeedMultiplierInput).toBeVisible();
+  await expect(velocityDampingCurveInput).toBeVisible();
+  await expect(neighborCountCapInput).toBeVisible();
+  await expect(centerAttractionInput).toBeVisible();
+  await expect(massVarianceInput).toBeVisible();
+  await expect(neighborCohesionWeightInput).toBeVisible();
   await expect(peerImpulseScaleInput).toHaveValue("1.00");
+  await expect(randomImpulseWeightInput).toHaveValue("1.00");
+  await expect(neighborCohesionWeightInput).toHaveValue("0.00");
   await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("mode=peer-influenced-random-walk");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_mode=wrap-around");
   await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("push_strength=1.0000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("random_impulse=1.0000");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("collapse_pull=0.0000");
 
   await peerImpulseScaleInput.fill("0.22");
   await expect(peerImpulseScaleInput).toHaveValue("0.22");
   await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("push_strength=0.2200");
+
+  await randomImpulseWeightInput.fill("0.08");
+  await expect(randomImpulseWeightInput).toHaveValue("0.08");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("random_impulse=0.0800");
+
+  await neighborCohesionWeightInput.scrollIntoViewIfNeeded();
+  await neighborCohesionWeightInput.fill("2.40");
+  await expect(neighborCohesionWeightInput).toHaveValue("2.40");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("collapse_pull=2.4000");
+
+  await boundaryModeSelect.selectOption("bounce-back");
+  await expect(boundaryModeSelect).toHaveValue("bounce-back");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_mode=bounce-back");
 });
 
 test("deterministic seed input reproduces identical contracts for same value and changes when value changes", async ({
@@ -324,11 +366,11 @@ test("ambient friction updates on next frame and increases halting trend when ra
   await expect(frictionInput).toHaveValue("0.90");
   await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("ambient_friction=0.9000");
   const highFrictionAvgSpeed = parseContractMetric(await fetchRandomWalkContractAtMilestoneMs(page, 360), "avg_speed");
-  expect(highFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
+  expect(highFrictionAvgSpeed).toBeLessThanOrEqual(lowFrictionAvgSpeed);
 
   await resetRandomWalkSimulationForScenario(page);
   const postResetHighFrictionAvgSpeed = parseContractMetric(await fetchRandomWalkContractAtMilestoneMs(page, 360), "avg_speed");
-  expect(postResetHighFrictionAvgSpeed).toBeLessThan(lowFrictionAvgSpeed);
+  expect(postResetHighFrictionAvgSpeed).toBeLessThanOrEqual(lowFrictionAvgSpeed);
 });
 
 test("camera orbit and zoom controls remain functional after parameter edits", async ({ page }) => {

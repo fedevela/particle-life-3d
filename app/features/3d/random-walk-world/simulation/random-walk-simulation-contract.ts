@@ -4,10 +4,20 @@ type ContractSnapshotInput = {
   stepScale: number;
   boundaryExtent: number;
   mode: "regular-random-walk" | "peer-influenced-random-walk";
+  boundaryMode: "wrap-around" | "bounce-back" | "edge-trap";
   ambientFriction: number;
   peerInfluenceRadius: number;
+  randomImpulseWeight: number;
+  separationWeight: number;
+  separationRadius: number;
+  maxSpeedMultiplier: number;
+  velocityDampingCurve: number;
+  neighborCountCap: number;
+  centerAttraction: number;
+  massVariance: number;
   velocityBiasWeight: number;
   peerBiasWeight: number;
+  neighborCohesionWeight: number;
   peerImpulseScale: number;
   positions: Float32Array;
   velocities: Float32Array;
@@ -71,13 +81,23 @@ export function buildRandomWalkContractText(snapshot: ContractSnapshotInput) {
     "[random-walk]",
     `frame=${snapshot.frame}`,
     `mode=${snapshot.mode}`,
+    `boundary_mode=${snapshot.boundaryMode}`,
     `dot_count=${snapshot.dotCount}`,
     `step_scale=${formatScalar(snapshot.stepScale)}`,
     `boundary_extent=${formatScalar(snapshot.boundaryExtent)}`,
     `ambient_friction=${formatScalar(snapshot.ambientFriction)}`,
     `peer_radius=${formatScalar(snapshot.peerInfluenceRadius)}`,
+    `random_impulse=${formatScalar(snapshot.randomImpulseWeight)}`,
+    `personal_space_strength=${formatScalar(snapshot.separationWeight)}`,
+    `personal_space_radius=${formatScalar(snapshot.separationRadius)}`,
+    `top_speed_limit=${formatScalar(snapshot.maxSpeedMultiplier)}`,
+    `braking_curve=${formatScalar(snapshot.velocityDampingCurve)}`,
+    `neighbor_attention=${formatScalar(snapshot.neighborCountCap)}`,
+    `center_pull=${formatScalar(snapshot.centerAttraction)}`,
+    `mass_diversity=${formatScalar(snapshot.massVariance)}`,
     `keep_direction=${formatScalar(snapshot.velocityBiasWeight)}`,
     `follow_neighbors=${formatScalar(snapshot.peerBiasWeight)}`,
+    `collapse_pull=${formatScalar(snapshot.neighborCohesionWeight)}`,
     `push_strength=${formatScalar(snapshot.peerImpulseScale)}`,
     `avg_x=${formatScalar(sumX / safeDotCount)}`,
     `avg_y=${formatScalar(sumY / safeDotCount)}`,
