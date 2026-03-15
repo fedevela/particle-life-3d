@@ -60,7 +60,6 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
   const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
   const helloShaderWorldActionQueue = useUiStore((state) => state.helloShaderWorldActionQueue);
   const dequeueHelloShaderWorldAction = useUiStore((state) => state.dequeueHelloShaderWorldAction);
-  const movementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
 
   const [error, setError] = useState<Error | null>(null);
   const [isSimulationReady, setIsSimulationReady] = useState(false);
@@ -84,7 +83,6 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
   useEffect(() => {
     try {
       const simulation = new HelloShaderWorldSimulation(gl, seed);
-      simulation.setMovementParams(movementParams);
       simulationRef.current = simulation;
       uniforms.uState.value = simulation.getStateTexture();
       setIsSimulationReady(true);
@@ -103,15 +101,6 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
       setIsSimulationReady(false);
     };
   }, [gl, seed, uniforms]);
-
-  useEffect(() => {
-    const simulation = simulationRef.current;
-    if (!simulation) {
-      return;
-    }
-
-    simulation.setMovementParams(movementParams);
-  }, [movementParams]);
 
   useEffect(() => {
     if (!onTestApiReady || !isSimulationReady) {

@@ -11,10 +11,10 @@ import {
 } from "~/types/hello-shader-world-movement";
 
 /** Define the square texture size used by GPU simulation state. */
-export const SHADER_TEXTURE_SIZE = 32;
+export const SHADER_TEXTURE_SIZE = 128;
 export const SHADER_PARTICLE_CAPACITY = SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE;
 /** Define exact frame numbers where the shader publishes milestone contracts. */
-export const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
+export const SHADER_MILESTONE_FRAMES = [0, 100, 200, 300] as const;
 /** Define a fixed simulation timestep used for deterministic frame progression. */
 const FIXED_TIME_STEP_SECONDS = 1 / 60;
 const TAU = Math.PI * 2;
@@ -50,16 +50,10 @@ export class HelloShaderWorldSimulation {
 
   /** Store published contracts by exact milestone frame number. */
   private readonly milestoneContracts = new Map<number, string>();
-
-  /** Reuse one readback buffer to avoid allocations during milestone snapshots. */
   private readonly readbackBuffer = new Float32Array(SHADER_PARTICLE_CAPACITY * 4);
   private readonly stagingTexture: THREE.DataTexture;
-
-  /** Keep active particle indexes to support deterministic add/remove operations. */
   private readonly activeParticleIndexes: number[] = [];
   private readonly activeIndexByParticle = new Int32Array(SHADER_PARTICLE_CAPACITY).fill(-1);
-
-  /** Initialize GPU simulation resources and seed frame 0 state. */
   constructor(renderer: THREE.WebGLRenderer, seed: string) {
     this.renderer = renderer;
     this.seedText = seed;
@@ -80,11 +74,7 @@ export class HelloShaderWorldSimulation {
     this.gpuCompute.setVariableDependencies(stateVariable, [stateVariable]);
     stateVariable.material.uniforms.uFrame = { value: 0 };
     stateVariable.material.uniforms.uSeed = { value: this.seedValue };
-    stateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
-    stateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
-    stateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
-    stateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
-    stateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
+    // Removed legacy movement param uniforms
     this.stateVariable = stateVariable;
 
     const capabilities = this.renderer.capabilities as THREE.WebGLRenderer["capabilities"] & {
@@ -92,7 +82,6 @@ export class HelloShaderWorldSimulation {
     };
     const originalMaxVertexTextures = capabilities.maxVertexTextures;
     if (originalMaxVertexTextures === 0) {
-      // Compute + readback still work for the contract tests; only the visual point-render path needs vertex textures.
       capabilities.maxVertexTextures = 1;
     }
 
@@ -111,18 +100,15 @@ export class HelloShaderWorldSimulation {
   public dispose() {
     this.gpuCompute.dispose();
   }
-
-  /** Return current GPU texture used by particle render shaders. */
   public getStateTexture() {
     return this.gpuCompute.getCurrentRenderTarget(this.stateVariable).texture;
   }
-
-  /** Return current simulation frame number. */
   public getCurrentFrame() {
     return this.frame;
   }
 
   public setMovementParams(nextParams: HelloShaderWorldMovementParams) {
+    // This is now a no-op, params are controlled in the shader.
     this.movementParams = clampHelloShaderWorldMovementParams(nextParams);
   }
 
@@ -137,13 +123,9 @@ export class HelloShaderWorldSimulation {
     this.captureMilestoneIfNeeded(0);
     logger.info("Reset GPU simulation to frame 0.");
   }
-
-  /** Return currently active ball count. */
   public getActiveParticleCount() {
     return this.activeParticleIndexes.length;
   }
-
-  /** Activate up to `amount` inactive particles at world center. */
   public addParticles(amount: number) {
     const requestedAmount = this.normalizeRequestedAmount(amount);
     if (requestedAmount === 0) {
@@ -163,7 +145,7 @@ export class HelloShaderWorldSimulation {
       const offset = index * 4;
       const spawnAngle = this.nextRandom() * TAU;
       const spawnRadius = this.nextRandom() * 0.04;
-      const spawnSpeed = this.movementParams.maxSpeed * (0.35 + (this.nextRandom() * 0.35));
+      const spawnSpeed = 0; // Start with zero velocity
       data[offset] = Math.cos(spawnAngle) * spawnRadius;
       data[offset + 1] = Math.sin(spawnAngle) * spawnRadius;
       data[offset + 2] = Math.cos(spawnAngle) * spawnSpeed;
@@ -179,8 +161,6 @@ export class HelloShaderWorldSimulation {
 
     return addedIndexes;
   }
-
-  /** Remove up to `amount` currently active particles using deterministic random selection. */
   public removeParticles(amount: number) {
     const requestedAmount = this.normalizeRequestedAmount(amount);
     if (requestedAmount === 0 || this.activeParticleIndexes.length === 0) {
@@ -199,8 +179,6 @@ export class HelloShaderWorldSimulation {
 
     return removedIndexes;
   }
-
-  /** Advance simulation by one frame and capture milestone report when configured. */
   public step() {
     const nextFrame = this.frame + 1;
     this.frame = nextFrame;
@@ -209,8 +187,6 @@ export class HelloShaderWorldSimulation {
     this.computeFrame(nextFrame);
     return this.captureMilestoneIfNeeded(nextFrame);
   }
-
-  /** Return contract text for one milestone frame or latest published milestone. */
   public getShaderContractText(frame?: number) {
     if (typeof frame === "number") {
       const exact = this.milestoneContracts.get(frame);
@@ -231,16 +207,10 @@ export class HelloShaderWorldSimulation {
 
     return this.milestoneContracts.get(latestFrame) as string;
   }
-
-  /** Execute one GPU computation pass configured for the provided frame number. */
   private computeFrame(frame: number) {
     this.stateVariable.material.uniforms.uFrame.value = frame;
     this.stateVariable.material.uniforms.uSeed.value = this.seedValue;
-    this.stateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
-    this.stateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
-    this.stateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
-    this.stateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
-    this.stateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
+    // Removed legacy movement param uniforms
     this.gpuCompute.compute();
   }
 
@@ -345,8 +315,6 @@ export class HelloShaderWorldSimulation {
     this.activeParticleIndexes.pop();
     this.activeIndexByParticle[index] = -1;
   }
-
-  /** Capture and store milestone text when this frame is configured as a report point. */
   private captureMilestoneIfNeeded(frame: number): ShaderMilestone | null {
     if (!SHADER_MILESTONE_FRAMES.includes(frame as (typeof SHADER_MILESTONE_FRAMES)[number])) {
       return null;
