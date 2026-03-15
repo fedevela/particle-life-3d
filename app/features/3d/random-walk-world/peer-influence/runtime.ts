@@ -1,6 +1,10 @@
 import type { FrameUpdatePlanInput, FrameUpdatePlanOutput } from "~/features/3d/random-walk-world/peer-influence/contracts";
 
-export { createNeighborSpatialIndex, type NeighborSpatialIndex } from "~/features/3d/random-walk-world/peer-influence/spatial-index";
+export {
+  createNeighborSpatialIndex,
+  deriveSpatialIndexBucketStats,
+  type NeighborSpatialIndex,
+} from "~/features/3d/random-walk-world/peer-influence/spatial-index";
 export {
   deriveNeighborAverageDirectionFromSpatialIndex,
   deriveNeighborAverageDirectionPlan,

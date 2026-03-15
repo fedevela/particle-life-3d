@@ -4,11 +4,38 @@ export type NeighborSpatialIndex = {
   positions: Float32Array;
   velocities: Float32Array;
   dotCount: number;
-  cellsByKey: Map<string, number[]>;
+  cellsByX: Map<number, Map<number, Map<number, number[]>>>;
 };
 
-function toCellKey(x: number, y: number, z: number, cellSize: number) {
-  return `${Math.floor(x / cellSize)}|${Math.floor(y / cellSize)}|${Math.floor(z / cellSize)}`;
+function toCellCoordinate(value: number, cellSize: number) {
+  return Math.floor(value / cellSize);
+}
+
+function getOrCreateBucket(
+  cellsByX: Map<number, Map<number, Map<number, number[]>>>,
+  x: number,
+  y: number,
+  z: number,
+) {
+  let cellsByY = cellsByX.get(x);
+  if (!cellsByY) {
+    cellsByY = new Map<number, Map<number, number[]>>();
+    cellsByX.set(x, cellsByY);
+  }
+
+  let cellsByZ = cellsByY.get(y);
+  if (!cellsByZ) {
+    cellsByZ = new Map<number, number[]>();
+    cellsByY.set(y, cellsByZ);
+  }
+
+  let bucket = cellsByZ.get(z);
+  if (!bucket) {
+    bucket = [];
+    cellsByZ.set(z, bucket);
+  }
+
+  return bucket;
 }
 
 export function createNeighborSpatialIndex(
@@ -22,16 +49,14 @@ export function createNeighborSpatialIndex(
     return null;
   }
 
-  const cellsByKey = new Map<string, number[]>();
+  const cellsByX = new Map<number, Map<number, Map<number, number[]>>>();
   for (let dotIndex = 0; dotIndex < dotCount; dotIndex += 1) {
     const offset = dotIndex * 3;
-    const key = toCellKey(positions[offset], positions[offset + 1], positions[offset + 2], radius);
-    const indices = cellsByKey.get(key);
-    if (indices) {
-      indices.push(dotIndex);
-    } else {
-      cellsByKey.set(key, [dotIndex]);
-    }
+    const cellX = toCellCoordinate(positions[offset], radius);
+    const cellY = toCellCoordinate(positions[offset + 1], radius);
+    const cellZ = toCellCoordinate(positions[offset + 2], radius);
+    const bucket = getOrCreateBucket(cellsByX, cellX, cellY, cellZ);
+    bucket.push(dotIndex);
   }
 
   return {
@@ -40,36 +65,43 @@ export function createNeighborSpatialIndex(
     positions,
     velocities,
     dotCount,
-    cellsByKey,
+    cellsByX,
   };
 }
-
-type SpatialNeighborCandidate = {
-  candidateIndex: number;
-  deltaX: number;
-  deltaY: number;
-  deltaZ: number;
-  distanceSquared: number;
-};
 
 export function forEachSpatialNeighbor(
   subjectDotIndex: number,
   spatialIndex: NeighborSpatialIndex,
-  visitor: (candidate: SpatialNeighborCandidate) => boolean | void,
+  visitor: (
+    candidateIndex: number,
+    deltaX: number,
+    deltaY: number,
+    deltaZ: number,
+    distanceSquared: number,
+  ) => boolean | void,
 ) {
   const subjectOffset = subjectDotIndex * 3;
   const subjectX = spatialIndex.positions[subjectOffset];
   const subjectY = spatialIndex.positions[subjectOffset + 1];
   const subjectZ = spatialIndex.positions[subjectOffset + 2];
-  const centerX = Math.floor(subjectX / spatialIndex.cellSize);
-  const centerY = Math.floor(subjectY / spatialIndex.cellSize);
-  const centerZ = Math.floor(subjectZ / spatialIndex.cellSize);
+  const centerX = toCellCoordinate(subjectX, spatialIndex.cellSize);
+  const centerY = toCellCoordinate(subjectY, spatialIndex.cellSize);
+  const centerZ = toCellCoordinate(subjectZ, spatialIndex.cellSize);
 
   for (let dx = -1; dx <= 1; dx += 1) {
+    const cellsByY = spatialIndex.cellsByX.get(centerX + dx);
+    if (!cellsByY) {
+      continue;
+    }
+
     for (let dy = -1; dy <= 1; dy += 1) {
+      const cellsByZ = cellsByY.get(centerY + dy);
+      if (!cellsByZ) {
+        continue;
+      }
+
       for (let dz = -1; dz <= 1; dz += 1) {
-        const key = `${centerX + dx}|${centerY + dy}|${centerZ + dz}`;
-        const candidateIndices = spatialIndex.cellsByKey.get(key);
+        const candidateIndices = cellsByZ.get(centerZ + dz);
         if (!candidateIndices) {
           continue;
         }
@@ -91,13 +123,7 @@ export function forEachSpatialNeighbor(
             continue;
           }
 
-          const shouldStop = visitor({
-            candidateIndex,
-            deltaX,
-            deltaY,
-            deltaZ,
-            distanceSquared,
-          });
+          const shouldStop = visitor(candidateIndex, deltaX, deltaY, deltaZ, distanceSquared);
           if (shouldStop === true) {
             return;
           }
@@ -105,4 +131,28 @@ export function forEachSpatialNeighbor(
       }
     }
   }
+}
+
+export function deriveSpatialIndexBucketStats(spatialIndex: NeighborSpatialIndex) {
+  let bucketCount = 0;
+  let totalBucketSize = 0;
+  let maxBucketSize = 0;
+
+  for (const cellsByY of spatialIndex.cellsByX.values()) {
+    for (const cellsByZ of cellsByY.values()) {
+      for (const bucket of cellsByZ.values()) {
+        bucketCount += 1;
+        totalBucketSize += bucket.length;
+        if (bucket.length > maxBucketSize) {
+          maxBucketSize = bucket.length;
+        }
+      }
+    }
+  }
+
+  return {
+    cellCount: bucketCount,
+    avgBucketSize: bucketCount > 0 ? totalBucketSize / bucketCount : 0,
+    maxBucketSize,
+  };
 }

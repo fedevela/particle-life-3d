@@ -30,13 +30,21 @@ function resolveRandomWalkPageConfiguration() {
     return {
       isTestMode: false,
       seed: null as string | null,
+      profileEnabled: false,
+      profileLogEveryFrames: 120,
+      profileIncludeSpatialStats: false,
     };
   }
 
   const searchParams = new URLSearchParams(window.location.search);
+  const profileLogEveryRaw = Number.parseInt(searchParams.get("rwProfileLogEveryFrames") ?? "", 10);
   return {
     isTestMode: searchParams.get("testMode") === "true",
     seed: searchParams.get("seed"),
+    profileEnabled: searchParams.get("rwProfile") === "1",
+    profileLogEveryFrames:
+      Number.isFinite(profileLogEveryRaw) && profileLogEveryRaw > 0 ? profileLogEveryRaw : 120,
+    profileIncludeSpatialStats: searchParams.get("rwProfileSpatial") === "1",
   };
 }
 
@@ -47,7 +55,10 @@ export function RandomWalkWorldPage() {
   const params = useUiStore((state) => state.randomWalkWorldParams);
   const physicsParams = useUiStore((state) => state.randomWalkWorldPhysicsParams);
   const seedInput = useUiStore((state) => state.randomWalkWorldSeedInput);
-  const { isTestMode, seed } = useMemo(() => resolveRandomWalkPageConfiguration(), []);
+  const { isTestMode, seed, profileEnabled, profileLogEveryFrames, profileIncludeSpatialStats } = useMemo(
+    () => resolveRandomWalkPageConfiguration(),
+    [],
+  );
   const sessionSeedRef = useRef(seed ?? crypto.randomUUID());
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
   const seedPlan = resolveRandomWalkSeed({
@@ -63,7 +74,15 @@ export function RandomWalkWorldPage() {
         <color attach="background" args={["#020617"]} />
         <ambientLight intensity={0.75} />
         <gridHelper args={[18, 18, "#164e63", "#0f172a"]} />
-        <RandomWalkDotCloud params={params} physicsParams={physicsParams} seed={resolvedSeed} isTestMode={isTestMode} />
+        <RandomWalkDotCloud
+          params={params}
+          physicsParams={physicsParams}
+          seed={resolvedSeed}
+          isTestMode={isTestMode}
+          profileEnabled={profileEnabled}
+          profileLogEveryFrames={profileLogEveryFrames}
+          profileIncludeSpatialStats={profileIncludeSpatialStats}
+        />
         <OrbitControls
           ref={orbitControlsRef}
           makeDefault
@@ -81,6 +100,9 @@ type RandomWalkDotCloudProps = {
   physicsParams: RandomWalkWorldPhysicsParams;
   seed: string;
   isTestMode: boolean;
+  profileEnabled?: boolean;
+  profileLogEveryFrames?: number;
+  profileIncludeSpatialStats?: boolean;
 };
 
 type RandomWalkCameraTestApiProps = {
@@ -117,13 +139,27 @@ function RandomWalkCameraTestApi({ isTestMode, orbitControlsRef }: RandomWalkCam
   return null;
 }
 
-function RandomWalkDotCloud({ params, physicsParams, seed, isTestMode }: RandomWalkDotCloudProps) {
+function RandomWalkDotCloud({
+  params,
+  physicsParams,
+  seed,
+  isTestMode,
+  profileEnabled = false,
+  profileLogEveryFrames = 120,
+  profileIncludeSpatialStats = false,
+}: RandomWalkDotCloudProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
   const simulationRef = useRef<RandomWalkWorldSimulation | null>(null);
   const frameAccumulatorMsRef = useRef(0);
   const simulation = useMemo(
-    () => new RandomWalkWorldSimulation(params, seed, isTestMode, physicsParams),
-    [params, seed, isTestMode],
+    () =>
+      new RandomWalkWorldSimulation(params, seed, isTestMode, physicsParams, {
+        enabled: profileEnabled,
+        logEveryFrames: profileLogEveryFrames,
+        label: seed,
+        includeSpatialStats: profileIncludeSpatialStats,
+      }),
+    [params, seed, isTestMode, profileEnabled, profileLogEveryFrames, profileIncludeSpatialStats],
   );
   simulationRef.current = simulation;
 

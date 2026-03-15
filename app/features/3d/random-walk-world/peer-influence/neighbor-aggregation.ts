@@ -1,5 +1,5 @@
 import type { NeighborAggregateInput, NeighborAggregateOutput } from "~/features/3d/random-walk-world/peer-influence/contracts";
-import { type NeighborSpatialIndex } from "~/features/3d/random-walk-world/peer-influence/spatial-index";
+import { forEachSpatialNeighbor, type NeighborSpatialIndex } from "~/features/3d/random-walk-world/peer-influence/spatial-index";
 import { NEAR_ZERO_EPSILON, normalizeVector, vectorLength } from "~/features/3d/random-walk-world/peer-influence/vector-blending";
 
 function deriveWeightedCohesionDirection(
@@ -42,65 +42,27 @@ export function deriveNeighborAverageDirectionFromSpatialIndex(
     };
   }
 
-  const subjectOffset = subjectDotIndex * 3;
-  const subjectX = spatialIndex.positions[subjectOffset];
-  const subjectY = spatialIndex.positions[subjectOffset + 1];
-  const subjectZ = spatialIndex.positions[subjectOffset + 2];
-  const centerX = Math.floor(subjectX / spatialIndex.cellSize);
-  const centerY = Math.floor(subjectY / spatialIndex.cellSize);
-  const centerZ = Math.floor(subjectZ / spatialIndex.cellSize);
   let neighborCount = 0;
   const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let sumX = 0;
   let sumY = 0;
   let sumZ = 0;
 
-  for (let dx = -1; dx <= 1; dx += 1) {
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dz = -1; dz <= 1; dz += 1) {
-        const key = `${centerX + dx}|${centerY + dy}|${centerZ + dz}`;
-        const candidateIndices = spatialIndex.cellsByKey.get(key);
-        if (!candidateIndices) {
-          continue;
-        }
-
-        for (const candidateIndex of candidateIndices) {
-          if (candidateIndex === subjectDotIndex) {
-            continue;
-          }
-
-          if (candidateIndex < 0 || candidateIndex >= spatialIndex.dotCount) {
-            continue;
-          }
-          const candidateOffset = candidateIndex * 3;
-
-          const deltaX = spatialIndex.positions[candidateOffset] - subjectX;
-          const deltaY = spatialIndex.positions[candidateOffset + 1] - subjectY;
-          const deltaZ = spatialIndex.positions[candidateOffset + 2] - subjectZ;
-          const distanceSquared = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
-          if (distanceSquared > spatialIndex.radiusSquared) {
-            continue;
-          }
-
-          const velocityX = spatialIndex.velocities[candidateOffset];
-          const velocityY = spatialIndex.velocities[candidateOffset + 1];
-          const velocityZ = spatialIndex.velocities[candidateOffset + 2];
-          const speed = Math.hypot(velocityX, velocityY, velocityZ);
-          if (speed <= NEAR_ZERO_EPSILON) {
-            continue;
-          }
-          if (neighborCount >= maxNeighbors) {
-            continue;
-          }
-
-          neighborCount += 1;
-          sumX += velocityX / speed;
-          sumY += velocityY / speed;
-          sumZ += velocityZ / speed;
-        }
-      }
+  forEachSpatialNeighbor(subjectDotIndex, spatialIndex, (candidateIndex) => {
+    const candidateOffset = candidateIndex * 3;
+    const velocityX = spatialIndex.velocities[candidateOffset];
+    const velocityY = spatialIndex.velocities[candidateOffset + 1];
+    const velocityZ = spatialIndex.velocities[candidateOffset + 2];
+    const speed = Math.hypot(velocityX, velocityY, velocityZ);
+    if (speed <= NEAR_ZERO_EPSILON || neighborCount >= maxNeighbors) {
+      return;
     }
-  }
+
+    neighborCount += 1;
+    sumX += velocityX / speed;
+    sumY += velocityY / speed;
+    sumZ += velocityZ / speed;
+  });
 
   if (neighborCount === 0) {
     return {
@@ -133,60 +95,30 @@ export function deriveNeighborCohesionDirectionFromSpatialIndex(
     return [0, 0, 0];
   }
 
-  const subjectOffset = subjectDotIndex * 3;
-  const subjectX = spatialIndex.positions[subjectOffset];
-  const subjectY = spatialIndex.positions[subjectOffset + 1];
-  const subjectZ = spatialIndex.positions[subjectOffset + 2];
-  const centerX = Math.floor(subjectX / spatialIndex.cellSize);
-  const centerY = Math.floor(subjectY / spatialIndex.cellSize);
-  const centerZ = Math.floor(subjectZ / spatialIndex.cellSize);
   let neighborCount = 0;
   const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let cohesionSumX = 0;
   let cohesionSumY = 0;
   let cohesionSumZ = 0;
 
-  for (let dx = -1; dx <= 1; dx += 1) {
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dz = -1; dz <= 1; dz += 1) {
-        const key = `${centerX + dx}|${centerY + dy}|${centerZ + dz}`;
-        const candidateIndices = spatialIndex.cellsByKey.get(key);
-        if (!candidateIndices) {
-          continue;
-        }
-
-        for (const candidateIndex of candidateIndices) {
-          if (candidateIndex === subjectDotIndex || candidateIndex < 0 || candidateIndex >= spatialIndex.dotCount) {
-            continue;
-          }
-          const candidateOffset = candidateIndex * 3;
-          const deltaX = spatialIndex.positions[candidateOffset] - subjectX;
-          const deltaY = spatialIndex.positions[candidateOffset + 1] - subjectY;
-          const deltaZ = spatialIndex.positions[candidateOffset + 2] - subjectZ;
-          const distanceSquared = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
-          if (distanceSquared > spatialIndex.radiusSquared) {
-            continue;
-          }
-          if (neighborCount >= maxNeighbors) {
-            continue;
-          }
-
-          neighborCount += 1;
-          const neighborDistance = Math.sqrt(distanceSquared);
-          const weightedDirection = deriveWeightedCohesionDirection(
-            deltaX,
-            deltaY,
-            deltaZ,
-            neighborDistance,
-            spatialIndex.cellSize,
-          );
-          cohesionSumX += weightedDirection[0];
-          cohesionSumY += weightedDirection[1];
-          cohesionSumZ += weightedDirection[2];
-        }
-      }
+  forEachSpatialNeighbor(subjectDotIndex, spatialIndex, (_, deltaX, deltaY, deltaZ, distanceSquared) => {
+    if (neighborCount >= maxNeighbors) {
+      return;
     }
-  }
+
+    neighborCount += 1;
+    const neighborDistance = Math.sqrt(distanceSquared);
+    const weightedDirection = deriveWeightedCohesionDirection(
+      deltaX,
+      deltaY,
+      deltaZ,
+      neighborDistance,
+      spatialIndex.cellSize,
+    );
+    cohesionSumX += weightedDirection[0];
+    cohesionSumY += weightedDirection[1];
+    cohesionSumZ += weightedDirection[2];
+  });
 
   if (neighborCount === 0) {
     return [0, 0, 0];
@@ -208,60 +140,30 @@ export function deriveNeighborSeparationDirectionFromSpatialIndex(
     return [0, 0, 0];
   }
 
-  const subjectOffset = subjectDotIndex * 3;
-  const subjectX = spatialIndex.positions[subjectOffset];
-  const subjectY = spatialIndex.positions[subjectOffset + 1];
-  const subjectZ = spatialIndex.positions[subjectOffset + 2];
-  const centerX = Math.floor(subjectX / spatialIndex.cellSize);
-  const centerY = Math.floor(subjectY / spatialIndex.cellSize);
-  const centerZ = Math.floor(subjectZ / spatialIndex.cellSize);
   let neighborCount = 0;
   const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let separationSumX = 0;
   let separationSumY = 0;
   let separationSumZ = 0;
 
-  for (let dx = -1; dx <= 1; dx += 1) {
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dz = -1; dz <= 1; dz += 1) {
-        const key = `${centerX + dx}|${centerY + dy}|${centerZ + dz}`;
-        const candidateIndices = spatialIndex.cellsByKey.get(key);
-        if (!candidateIndices) {
-          continue;
-        }
-
-        for (const candidateIndex of candidateIndices) {
-          if (candidateIndex === subjectDotIndex || candidateIndex < 0 || candidateIndex >= spatialIndex.dotCount) {
-            continue;
-          }
-          const candidateOffset = candidateIndex * 3;
-          const deltaX = spatialIndex.positions[candidateOffset] - subjectX;
-          const deltaY = spatialIndex.positions[candidateOffset + 1] - subjectY;
-          const deltaZ = spatialIndex.positions[candidateOffset + 2] - subjectZ;
-          const distanceSquared = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
-          if (distanceSquared > spatialIndex.radiusSquared) {
-            continue;
-          }
-          if (neighborCount >= maxNeighbors) {
-            continue;
-          }
-
-          neighborCount += 1;
-          const distance = Math.sqrt(distanceSquared);
-          const cohesionDirection = deriveWeightedCohesionDirection(
-            deltaX,
-            deltaY,
-            deltaZ,
-            distance,
-            spatialIndex.cellSize,
-          );
-          separationSumX -= cohesionDirection[0];
-          separationSumY -= cohesionDirection[1];
-          separationSumZ -= cohesionDirection[2];
-        }
-      }
+  forEachSpatialNeighbor(subjectDotIndex, spatialIndex, (_, deltaX, deltaY, deltaZ, distanceSquared) => {
+    if (neighborCount >= maxNeighbors) {
+      return;
     }
-  }
+
+    neighborCount += 1;
+    const distance = Math.sqrt(distanceSquared);
+    const cohesionDirection = deriveWeightedCohesionDirection(
+      deltaX,
+      deltaY,
+      deltaZ,
+      distance,
+      spatialIndex.cellSize,
+    );
+    separationSumX -= cohesionDirection[0];
+    separationSumY -= cohesionDirection[1];
+    separationSumZ -= cohesionDirection[2];
+  });
 
   if (neighborCount === 0) {
     return [0, 0, 0];

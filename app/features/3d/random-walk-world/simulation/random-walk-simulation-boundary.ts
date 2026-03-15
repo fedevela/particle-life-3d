@@ -35,38 +35,41 @@ export function applyBoundaryTransition(input: BoundaryTransitionInput) {
 
   const min = -input.boundaryExtent;
   const max = input.boundaryExtent;
-  const axes = [
-    { position: x, velocity: vx },
-    { position: y, velocity: vy },
-    { position: z, velocity: vz },
-  ];
-
-  for (let axisIndex = 0; axisIndex < axes.length; axisIndex += 1) {
-    const axis = axes[axisIndex];
-    if (axis.position < min || axis.position > max) {
-      wrapOccurred = true;
-
-      if (input.boundaryMode === "bounce-back") {
-        if (axis.position < min) {
-          axis.position = min + (min - axis.position);
-        } else {
-          axis.position = max - (axis.position - max);
-        }
-        axis.position = Math.min(max, Math.max(min, axis.position));
-        axis.velocity *= -1;
-      } else {
-        axis.position = Math.min(max, Math.max(min, axis.position));
-        axis.velocity = 0;
-      }
+  if (x < min || x > max) {
+    wrapOccurred = true;
+    if (input.boundaryMode === "bounce-back") {
+      x = x < min ? min + (min - x) : max - (x - max);
+      x = Math.min(max, Math.max(min, x));
+      vx *= -1;
+    } else {
+      x = Math.min(max, Math.max(min, x));
+      vx = 0;
     }
   }
 
-  x = axes[0].position;
-  y = axes[1].position;
-  z = axes[2].position;
-  vx = axes[0].velocity;
-  vy = axes[1].velocity;
-  vz = axes[2].velocity;
+  if (y < min || y > max) {
+    wrapOccurred = true;
+    if (input.boundaryMode === "bounce-back") {
+      y = y < min ? min + (min - y) : max - (y - max);
+      y = Math.min(max, Math.max(min, y));
+      vy *= -1;
+    } else {
+      y = Math.min(max, Math.max(min, y));
+      vy = 0;
+    }
+  }
+
+  if (z < min || z > max) {
+    wrapOccurred = true;
+    if (input.boundaryMode === "bounce-back") {
+      z = z < min ? min + (min - z) : max - (z - max);
+      z = Math.min(max, Math.max(min, z));
+      vz *= -1;
+    } else {
+      z = Math.min(max, Math.max(min, z));
+      vz = 0;
+    }
+  }
 
   return {
     wrapOccurred,

@@ -1,9 +1,9 @@
 import { type NeighborSpatialIndex } from "~/features/3d/random-walk-world/peer-influence/runtime";
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
 import {
-  applyRegularRandomWalkImpulse,
-  clampVelocityMagnitude,
-  composePeerInfluencedVelocity,
+  applyRegularRandomWalkImpulseComponents,
+  clampVelocityMagnitudeComponents,
+  composePeerInfluencedVelocityComponents,
 } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-impulse";
 import { applyBoundaryTransition } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-boundary";
 import type {
@@ -35,20 +35,31 @@ type DotStepResult = {
 
 export function integrateDotStep(input: DotStepInput): DotStepResult {
   const offset = input.dotIndex * 3;
-  const startVelocity: [number, number, number] = [
-    input.velocities[offset],
-    input.velocities[offset + 1],
-    input.velocities[offset + 2],
-  ];
-  const previousSpeed = Math.hypot(startVelocity[0], startVelocity[1], startVelocity[2]);
+  const positionX = input.positions[offset];
+  const positionY = input.positions[offset + 1];
+  const positionZ = input.positions[offset + 2];
+  const velocityX = input.velocities[offset];
+  const velocityY = input.velocities[offset + 1];
+  const velocityZ = input.velocities[offset + 2];
+  const previousSpeed = Math.hypot(velocityX, velocityY, velocityZ);
 
   const impulsedVelocity =
     input.mode === "regular-random-walk"
-      ? applyRegularRandomWalkImpulse(startVelocity, input.params.stepScale, input.nextSignedRandom)
-      : composePeerInfluencedVelocity({
+      ? applyRegularRandomWalkImpulseComponents(
+          velocityX,
+          velocityY,
+          velocityZ,
+          input.params.stepScale,
+          input.nextSignedRandom,
+        )
+      : composePeerInfluencedVelocityComponents({
           dotIndex: input.dotIndex,
-          position: [input.positions[offset], input.positions[offset + 1], input.positions[offset + 2]],
-          velocity: startVelocity,
+          positionX,
+          positionY,
+          positionZ,
+          velocityX,
+          velocityY,
+          velocityZ,
           normalizedFriction: input.normalizedFriction,
           stepScale: input.params.stepScale,
           massNoise: input.massNoiseByDot[input.dotIndex],
@@ -58,13 +69,18 @@ export function integrateDotStep(input: DotStepInput): DotStepResult {
           nextSignedRandom: input.nextSignedRandom,
         });
 
-  const clampedVelocity = clampVelocityMagnitude(impulsedVelocity, input.maxSpeed);
+  const clampedVelocity = clampVelocityMagnitudeComponents(
+    impulsedVelocity[0],
+    impulsedVelocity[1],
+    impulsedVelocity[2],
+    input.maxSpeed,
+  );
 
   const transition = applyBoundaryTransition({
     nextPosition: [
-      input.positions[offset] + clampedVelocity[0],
-      input.positions[offset + 1] + clampedVelocity[1],
-      input.positions[offset + 2] + clampedVelocity[2],
+      positionX + clampedVelocity[0],
+      positionY + clampedVelocity[1],
+      positionZ + clampedVelocity[2],
     ],
     velocity: clampedVelocity,
     boundaryExtent: input.params.boundaryExtent,

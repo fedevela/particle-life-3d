@@ -1,6 +1,7 @@
 import { createRandomWalkToroidalPhysicsPort } from "~/features/3d/random-walk-world/random-walk-world-physics-seam";
 import {
   createNeighborSpatialIndex,
+  deriveSpatialIndexBucketStats,
   deriveFrameUpdatePlan,
 } from "~/features/3d/random-walk-world/peer-influence/runtime";
 import { buildRandomWalkContractText } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-contract";
@@ -20,6 +21,87 @@ import {
 
 const RANDOM_WALK_FRAME_DURATION_MS = 1000 / 60;
 const MAX_CAPTURED_CONTRACT_FRAMES = 2048;
+
+type RandomWalkSimulationProfilingOptions = {
+  enabled: boolean;
+  logEveryFrames?: number;
+  label?: string;
+  includeSpatialStats?: boolean;
+};
+
+type SimulationProfileSample = {
+  mode: RandomWalkWorldPhysicsParams["mode"];
+  dotCount: number;
+  totalMs: number;
+  framePlanMs: number;
+  indexBuildMs: number;
+  integrationMs: number;
+  progressionMs: number;
+  neighborCellCount: number;
+  separationCellCount: number;
+  neighborMaxBucketSize: number;
+  separationMaxBucketSize: number;
+  neighborAvgBucketSize: number;
+  separationAvgBucketSize: number;
+};
+
+type ProfileAccumulator = {
+  sampleCount: number;
+  dotCountTotal: number;
+  totalMs: number;
+  framePlanMs: number;
+  indexBuildMs: number;
+  integrationMs: number;
+  progressionMs: number;
+  neighborCellCount: number;
+  separationCellCount: number;
+  neighborMaxBucketSize: number;
+  separationMaxBucketSize: number;
+  neighborAvgBucketSize: number;
+  separationAvgBucketSize: number;
+};
+
+function nowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+
+  return Date.now();
+}
+
+function createProfileAccumulator(): ProfileAccumulator {
+  return {
+    sampleCount: 0,
+    dotCountTotal: 0,
+    totalMs: 0,
+    framePlanMs: 0,
+    indexBuildMs: 0,
+    integrationMs: 0,
+    progressionMs: 0,
+    neighborCellCount: 0,
+    separationCellCount: 0,
+    neighborMaxBucketSize: 0,
+    separationMaxBucketSize: 0,
+    neighborAvgBucketSize: 0,
+    separationAvgBucketSize: 0,
+  };
+}
+
+function resetProfileAccumulator(acc: ProfileAccumulator) {
+  acc.sampleCount = 0;
+  acc.dotCountTotal = 0;
+  acc.totalMs = 0;
+  acc.framePlanMs = 0;
+  acc.indexBuildMs = 0;
+  acc.integrationMs = 0;
+  acc.progressionMs = 0;
+  acc.neighborCellCount = 0;
+  acc.separationCellCount = 0;
+  acc.neighborMaxBucketSize = 0;
+  acc.separationMaxBucketSize = 0;
+  acc.neighborAvgBucketSize = 0;
+  acc.separationAvgBucketSize = 0;
+}
 
 export function getRandomWalkFrameForTimeMs(timeMs: number) {
   if (!Number.isFinite(timeMs) || timeMs < 0) {
@@ -43,12 +125,20 @@ export class RandomWalkWorldSimulation {
   private physicsParamsVersion = 0;
   private lastAppliedPhysicsParamsVersion = -1;
   private frame = 0;
+  private readonly profilingEnabled: boolean;
+  private readonly profilingLogEveryFrames: number;
+  private readonly profilingLabel: string;
+  private readonly profilingIncludeSpatialStats: boolean;
+  private readonly overallProfileAccumulator = createProfileAccumulator();
+  private readonly regularModeProfileAccumulator = createProfileAccumulator();
+  private readonly peerModeProfileAccumulator = createProfileAccumulator();
 
   constructor(
     params: RandomWalkWorldParams,
     seed: string,
     captureContractFrames = false,
     physicsParams: RandomWalkWorldPhysicsParams = DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS,
+    profilingOptions: RandomWalkSimulationProfilingOptions = { enabled: false },
   ) {
     this.params = params;
     this.physicsParams = physicsParams;
@@ -58,6 +148,10 @@ export class RandomWalkWorldSimulation {
     this.velocities = new Float32Array(params.dotCount * 3);
     this.massNoiseByDot = new Float32Array(params.dotCount);
     this.rngState = hashSeed(seed);
+    this.profilingEnabled = profilingOptions.enabled;
+    this.profilingLogEveryFrames = Math.max(1, Math.floor(profilingOptions.logEveryFrames ?? 120));
+    this.profilingLabel = profilingOptions.label ?? "random-walk";
+    this.profilingIncludeSpatialStats = profilingOptions.includeSpatialStats ?? false;
     this.initializeMassNoise();
     this.initializeState();
     this.captureFrameContract(0);
@@ -72,6 +166,7 @@ export class RandomWalkWorldSimulation {
   }
 
   public stepFrame() {
+    const stepStartedAt = this.profilingEnabled ? nowMs() : 0;
     if (
       shouldApplyRealtimePhysicsParams({
         latestUiPhysicsParamsVersion: this.physicsParamsVersion,
@@ -89,6 +184,7 @@ export class RandomWalkWorldSimulation {
       velocityBiasWeight: this.physicsParams.velocityBiasWeight,
       peerBiasWeight: this.physicsParams.peerBiasWeight,
     });
+    const framePlanDoneAt = this.profilingEnabled ? nowMs() : 0;
 
     const maxSpeed = this.params.stepScale * this.physicsParams.maxSpeedMultiplier;
     let previousSpeedTotal = 0;
@@ -112,6 +208,13 @@ export class RandomWalkWorldSimulation {
             this.physicsParams.separationRadius,
           )
         : null;
+    const indexBuildDoneAt = this.profilingEnabled ? nowMs() : 0;
+    const neighborIndexStats = this.profilingEnabled
+      ? this.deriveSpatialIndexStats(neighborSpatialIndex)
+      : null;
+    const separationIndexStats = this.profilingEnabled
+      ? this.deriveSpatialIndexStats(separationSpatialIndex)
+      : null;
 
     for (let index = 0; index < this.params.dotCount; index += 1) {
       const dotStep = integrateDotStep({
@@ -133,6 +236,7 @@ export class RandomWalkWorldSimulation {
       nextSpeedTotal += dotStep.nextSpeed;
       wrapOccurred = wrapOccurred || dotStep.wrapOccurred;
     }
+    const integrationDoneAt = this.profilingEnabled ? nowMs() : 0;
 
     assessFrameProgression({
       frameDurationMs: RANDOM_WALK_FRAME_DURATION_MS,
@@ -140,9 +244,28 @@ export class RandomWalkWorldSimulation {
       nextAverageSpeed: nextSpeedTotal / this.params.dotCount,
       wrapOccurred,
     });
+    const progressionDoneAt = this.profilingEnabled ? nowMs() : 0;
 
     this.frame += 1;
     this.captureFrameContract(this.frame);
+
+    if (this.profilingEnabled) {
+      this.recordProfileSample({
+        mode: framePlan.mode,
+        dotCount: this.params.dotCount,
+        totalMs: progressionDoneAt - stepStartedAt,
+        framePlanMs: framePlanDoneAt - stepStartedAt,
+        indexBuildMs: indexBuildDoneAt - framePlanDoneAt,
+        integrationMs: integrationDoneAt - indexBuildDoneAt,
+        progressionMs: progressionDoneAt - integrationDoneAt,
+        neighborCellCount: neighborIndexStats?.cellCount ?? 0,
+        separationCellCount: separationIndexStats?.cellCount ?? 0,
+        neighborMaxBucketSize: neighborIndexStats?.maxBucketSize ?? 0,
+        separationMaxBucketSize: separationIndexStats?.maxBucketSize ?? 0,
+        neighborAvgBucketSize: neighborIndexStats?.avgBucketSize ?? 0,
+        separationAvgBucketSize: separationIndexStats?.avgBucketSize ?? 0,
+      });
+    }
   }
 
   public setPhysicsParams(nextPhysicsParams: RandomWalkWorldPhysicsParams) {
@@ -252,5 +375,85 @@ export class RandomWalkWorldSimulation {
       positions: this.positions,
       velocities: this.velocities,
     });
+  }
+
+  private recordProfileSample(sample: SimulationProfileSample) {
+    this.accumulateProfileSample(this.overallProfileAccumulator, sample);
+    const modeAccumulator =
+      sample.mode === "regular-random-walk"
+        ? this.regularModeProfileAccumulator
+        : this.peerModeProfileAccumulator;
+    this.accumulateProfileSample(modeAccumulator, sample);
+
+    if (this.overallProfileAccumulator.sampleCount < this.profilingLogEveryFrames) {
+      return;
+    }
+
+    this.logProfileAccumulator("all", this.overallProfileAccumulator);
+    this.logProfileAccumulator("regular-random-walk", this.regularModeProfileAccumulator);
+    this.logProfileAccumulator("peer-influenced-random-walk", this.peerModeProfileAccumulator);
+
+    resetProfileAccumulator(this.overallProfileAccumulator);
+    resetProfileAccumulator(this.regularModeProfileAccumulator);
+    resetProfileAccumulator(this.peerModeProfileAccumulator);
+  }
+
+  private accumulateProfileSample(acc: ProfileAccumulator, sample: SimulationProfileSample) {
+    acc.sampleCount += 1;
+    acc.dotCountTotal += sample.dotCount;
+    acc.totalMs += sample.totalMs;
+    acc.framePlanMs += sample.framePlanMs;
+    acc.indexBuildMs += sample.indexBuildMs;
+    acc.integrationMs += sample.integrationMs;
+    acc.progressionMs += sample.progressionMs;
+    acc.neighborCellCount += sample.neighborCellCount;
+    acc.separationCellCount += sample.separationCellCount;
+    acc.neighborMaxBucketSize = Math.max(acc.neighborMaxBucketSize, sample.neighborMaxBucketSize);
+    acc.separationMaxBucketSize = Math.max(acc.separationMaxBucketSize, sample.separationMaxBucketSize);
+    acc.neighborAvgBucketSize += sample.neighborAvgBucketSize;
+    acc.separationAvgBucketSize += sample.separationAvgBucketSize;
+  }
+
+  private logProfileAccumulator(scope: string, acc: ProfileAccumulator) {
+    if (acc.sampleCount <= 0) {
+      return;
+    }
+
+    const divisor = acc.sampleCount;
+    const baseParts = [
+      `[random-walk-profiler:${this.profilingLabel}]`,
+      `scope=${scope}`,
+      `frame=${this.frame}`,
+      `samples=${divisor}`,
+      `avg_dots=${(acc.dotCountTotal / divisor).toFixed(1)}`,
+      `avg_total_ms=${(acc.totalMs / divisor).toFixed(3)}`,
+      `avg_frame_plan_ms=${(acc.framePlanMs / divisor).toFixed(3)}`,
+      `avg_index_build_ms=${(acc.indexBuildMs / divisor).toFixed(3)}`,
+      `avg_integration_ms=${(acc.integrationMs / divisor).toFixed(3)}`,
+      `avg_progression_ms=${(acc.progressionMs / divisor).toFixed(3)}`,
+    ];
+
+    if (this.profilingIncludeSpatialStats) {
+      baseParts.push(
+        `avg_neighbor_cells=${(acc.neighborCellCount / divisor).toFixed(1)}`,
+        `avg_separation_cells=${(acc.separationCellCount / divisor).toFixed(1)}`,
+        `avg_neighbor_bucket=${(acc.neighborAvgBucketSize / divisor).toFixed(3)}`,
+        `avg_separation_bucket=${(acc.separationAvgBucketSize / divisor).toFixed(3)}`,
+        `max_neighbor_bucket=${acc.neighborMaxBucketSize}`,
+        `max_separation_bucket=${acc.separationMaxBucketSize}`,
+      );
+    }
+
+    console.info(baseParts.join(" "));
+  }
+
+  private deriveSpatialIndexStats(
+    spatialIndex: ReturnType<typeof createNeighborSpatialIndex>,
+  ): { cellCount: number; avgBucketSize: number; maxBucketSize: number } | null {
+    if (!spatialIndex) {
+      return null;
+    }
+
+    return deriveSpatialIndexBucketStats(spatialIndex);
   }
 }
