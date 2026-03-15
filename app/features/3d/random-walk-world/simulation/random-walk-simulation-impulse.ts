@@ -1,9 +1,7 @@
 import {
+  deriveDensityFieldSample,
   deriveAmbientFrictionDecayPlan,
   deriveDualBiasImpulseDirectionPlan,
-  deriveNeighborAverageDirectionFromSpatialIndex,
-  deriveNeighborCohesionDirectionFromSpatialIndex,
-  deriveNeighborSeparationDirectionFromSpatialIndex,
   type NeighborSpatialIndex,
 } from "~/features/3d/random-walk-world/peer-influence/runtime";
 import { hashSeed } from "~/features/3d/random-walk-world/simulation/random-walk-simulation-rng";
@@ -37,6 +35,35 @@ export function deriveMassFactorFromNoise(massNoise: number, massVariance: numbe
 
   const centeredNoise = massNoise * 2 - 1;
   return Math.max(0.05, 1 + centeredNoise * normalizedVariance);
+}
+
+function clampToPositiveUnit(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return Math.min(1, value / (1 + value));
+}
+
+function deriveDensityWeightedPeerForces(input: {
+  alignmentDensityPerVolume: number;
+  separationDensityPerVolume: number;
+  peerBiasWeight: number;
+  cohesionWeight: number;
+  separationWeight: number;
+  impulseScale: number;
+}) {
+  const alignmentDensityFactor = clampToPositiveUnit(input.alignmentDensityPerVolume);
+  const separationDensityFactor = clampToPositiveUnit(input.separationDensityPerVolume);
+
+  return {
+    peerBiasWeight: input.peerBiasWeight * (0.35 + alignmentDensityFactor * 1.65),
+    cohesionWeight: input.cohesionWeight * (0.2 + alignmentDensityFactor * 1.8),
+    separationWeight: input.separationWeight * (0.25 + separationDensityFactor * 1.75),
+    impulseScaleMultiplier:
+      input.impulseScale *
+      (0.7 + alignmentDensityFactor * 0.55 + separationDensityFactor * 0.75),
+  };
 }
 
 export function applyRegularRandomWalkImpulse(
@@ -129,41 +156,57 @@ export function composePeerInfluencedVelocityComponents(
   let vz = friction.decayedVelocity[2];
 
   const velocityDirection = normalizeDirection(vx, vy, vz);
-  const neighborAggregate = deriveNeighborAverageDirectionFromSpatialIndex(
-    input.dotIndex,
+  const neighborField = deriveDensityFieldSample(
     input.neighborSpatialIndex,
-    input.physicsParams.neighborCountCap,
+    input.positionX,
+    input.positionY,
+    input.positionZ,
   );
-  const neighborCohesionDirection = deriveNeighborCohesionDirectionFromSpatialIndex(
-    input.dotIndex,
-    input.neighborSpatialIndex,
-    input.physicsParams.neighborCountCap,
-  );
-  const neighborSeparationDirection = deriveNeighborSeparationDirectionFromSpatialIndex(
-    input.dotIndex,
+  const separationField = deriveDensityFieldSample(
     input.separationSpatialIndex,
-    input.physicsParams.neighborCountCap,
+    input.positionX,
+    input.positionY,
+    input.positionZ,
   );
+  const peerAverageDirection = normalizeDirection(neighborField.flowX, neighborField.flowY, neighborField.flowZ);
+  const neighborCohesionDirection = normalizeDirection(
+    neighborField.gradientX,
+    neighborField.gradientY,
+    neighborField.gradientZ,
+  );
+  const neighborSeparationDirection = normalizeDirection(
+    -separationField.gradientX,
+    -separationField.gradientY,
+    -separationField.gradientZ,
+  );
+  const densityWeightedForces = deriveDensityWeightedPeerForces({
+    alignmentDensityPerVolume: neighborField.densityPerVolume,
+    separationDensityPerVolume: separationField.densityPerVolume,
+    peerBiasWeight: input.physicsParams.peerBiasWeight,
+    cohesionWeight: input.physicsParams.neighborCohesionWeight,
+    separationWeight: input.physicsParams.separationWeight,
+    impulseScale: input.physicsParams.peerImpulseScale,
+  });
   const centerAttractionDirection = normalizeDirection(-input.positionX, -input.positionY, -input.positionZ);
   const randomDirection = normalizeDirection(input.nextSignedRandom(), input.nextSignedRandom(), input.nextSignedRandom());
 
   const impulseDirection = deriveDualBiasImpulseDirectionPlan({
     randomUnitDirection: randomDirection,
     currentVelocityDirection: velocityDirection,
-    peerAverageDirection: neighborAggregate.averageDirection,
+    peerAverageDirection,
     peerCohesionDirection: neighborCohesionDirection,
     peerSeparationDirection: neighborSeparationDirection,
     centerAttractionDirection,
     randomImpulseWeight: input.physicsParams.randomImpulseWeight,
     velocityBiasWeight: input.physicsParams.velocityBiasWeight,
-    peerBiasWeight: input.physicsParams.peerBiasWeight,
-    peerCohesionWeight: input.physicsParams.neighborCohesionWeight,
-    peerSeparationWeight: input.physicsParams.separationWeight,
+    peerBiasWeight: densityWeightedForces.peerBiasWeight,
+    peerCohesionWeight: densityWeightedForces.cohesionWeight,
+    peerSeparationWeight: densityWeightedForces.separationWeight,
     centerAttractionWeight: input.physicsParams.centerAttraction,
   });
 
   const massFactor = deriveMassFactorFromNoise(input.massNoise, input.physicsParams.massVariance);
-  const impulseScale = (input.stepScale * input.physicsParams.peerImpulseScale) / massFactor;
+  const impulseScale = (input.stepScale * densityWeightedForces.impulseScaleMultiplier) / massFactor;
 
   vx += impulseDirection.biasedDirection[0] * impulseScale;
   vy += impulseDirection.biasedDirection[1] * impulseScale;

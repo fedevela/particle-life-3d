@@ -24,7 +24,6 @@ function deriveWeightedCohesionDirection(
 export function deriveNeighborAverageDirectionFromSpatialIndex(
   subjectDotIndex: number,
   spatialIndex: NeighborSpatialIndex | null,
-  neighborCountCap: number,
 ): NeighborAggregateOutput {
   if (!spatialIndex) {
     return {
@@ -43,7 +42,6 @@ export function deriveNeighborAverageDirectionFromSpatialIndex(
   }
 
   let neighborCount = 0;
-  const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let sumX = 0;
   let sumY = 0;
   let sumZ = 0;
@@ -54,7 +52,7 @@ export function deriveNeighborAverageDirectionFromSpatialIndex(
     const velocityY = spatialIndex.velocities[candidateOffset + 1];
     const velocityZ = spatialIndex.velocities[candidateOffset + 2];
     const speed = Math.hypot(velocityX, velocityY, velocityZ);
-    if (speed <= NEAR_ZERO_EPSILON || neighborCount >= maxNeighbors) {
+    if (speed <= NEAR_ZERO_EPSILON) {
       return;
     }
 
@@ -85,7 +83,6 @@ export function deriveNeighborAverageDirectionFromSpatialIndex(
 export function deriveNeighborCohesionDirectionFromSpatialIndex(
   subjectDotIndex: number,
   spatialIndex: NeighborSpatialIndex | null,
-  neighborCountCap: number,
 ): [number, number, number] {
   if (!spatialIndex) {
     return [0, 0, 0];
@@ -96,16 +93,11 @@ export function deriveNeighborCohesionDirectionFromSpatialIndex(
   }
 
   let neighborCount = 0;
-  const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let cohesionSumX = 0;
   let cohesionSumY = 0;
   let cohesionSumZ = 0;
 
   forEachSpatialNeighbor(subjectDotIndex, spatialIndex, (_, deltaX, deltaY, deltaZ, distanceSquared) => {
-    if (neighborCount >= maxNeighbors) {
-      return;
-    }
-
     neighborCount += 1;
     const neighborDistance = Math.sqrt(distanceSquared);
     const weightedDirection = deriveWeightedCohesionDirection(
@@ -130,7 +122,6 @@ export function deriveNeighborCohesionDirectionFromSpatialIndex(
 export function deriveNeighborSeparationDirectionFromSpatialIndex(
   subjectDotIndex: number,
   spatialIndex: NeighborSpatialIndex | null,
-  neighborCountCap: number,
 ): [number, number, number] {
   if (!spatialIndex) {
     return [0, 0, 0];
@@ -141,16 +132,11 @@ export function deriveNeighborSeparationDirectionFromSpatialIndex(
   }
 
   let neighborCount = 0;
-  const maxNeighbors = Math.max(1, Math.floor(neighborCountCap));
   let separationSumX = 0;
   let separationSumY = 0;
   let separationSumZ = 0;
 
   forEachSpatialNeighbor(subjectDotIndex, spatialIndex, (_, deltaX, deltaY, deltaZ, distanceSquared) => {
-    if (neighborCount >= maxNeighbors) {
-      return;
-    }
-
     neighborCount += 1;
     const distance = Math.sqrt(distanceSquared);
     const cohesionDirection = deriveWeightedCohesionDirection(

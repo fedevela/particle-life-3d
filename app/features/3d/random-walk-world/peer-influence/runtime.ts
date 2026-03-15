@@ -2,6 +2,7 @@ import type { FrameUpdatePlanInput, FrameUpdatePlanOutput } from "~/features/3d/
 
 export {
   createNeighborSpatialIndex,
+  deriveDensityFieldSample,
   deriveSpatialIndexBucketStats,
   type NeighborSpatialIndex,
 } from "~/features/3d/random-walk-world/peer-influence/spatial-index";

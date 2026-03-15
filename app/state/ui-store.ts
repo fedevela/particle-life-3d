@@ -184,7 +184,6 @@ export const useUiStore = create<UiState>((set) => ({
     separationRadius: 0.7,
     maxSpeedMultiplier: 3,
     velocityDampingCurve: 1,
-    neighborCountCap: 64,
     centerAttraction: 0,
     massVariance: 0,
     velocityBiasWeight: 1,

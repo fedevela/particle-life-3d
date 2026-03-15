@@ -365,7 +365,6 @@ export class RandomWalkWorldSimulation {
       separationRadius: this.physicsParams.separationRadius,
       maxSpeedMultiplier: this.physicsParams.maxSpeedMultiplier,
       velocityDampingCurve: this.physicsParams.velocityDampingCurve,
-      neighborCountCap: this.physicsParams.neighborCountCap,
       centerAttraction: this.physicsParams.centerAttraction,
       massVariance: this.physicsParams.massVariance,
       velocityBiasWeight: this.physicsParams.velocityBiasWeight,

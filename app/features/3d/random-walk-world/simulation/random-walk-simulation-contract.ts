@@ -12,7 +12,6 @@ type ContractSnapshotInput = {
   separationRadius: number;
   maxSpeedMultiplier: number;
   velocityDampingCurve: number;
-  neighborCountCap: number;
   centerAttraction: number;
   massVariance: number;
   velocityBiasWeight: number;
@@ -92,7 +91,6 @@ export function buildRandomWalkContractText(snapshot: ContractSnapshotInput) {
     `personal_space_radius=${formatScalar(snapshot.separationRadius)}`,
     `top_speed_limit=${formatScalar(snapshot.maxSpeedMultiplier)}`,
     `braking_curve=${formatScalar(snapshot.velocityDampingCurve)}`,
-    `neighbor_attention=${formatScalar(snapshot.neighborCountCap)}`,
     `center_pull=${formatScalar(snapshot.centerAttraction)}`,
     `mass_diversity=${formatScalar(snapshot.massVariance)}`,
     `keep_direction=${formatScalar(snapshot.velocityBiasWeight)}`,

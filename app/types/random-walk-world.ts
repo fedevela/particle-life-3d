@@ -34,7 +34,6 @@ export type RandomWalkWorldPhysicsParamKey =
   | "separationRadius"
   | "maxSpeedMultiplier"
   | "velocityDampingCurve"
-  | "neighborCountCap"
   | "centerAttraction"
   | "massVariance"
   | "velocityBiasWeight"
@@ -69,7 +68,6 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER: readonly RandomWalkWorldPhys
   "separationRadius",
   "maxSpeedMultiplier",
   "velocityDampingCurve",
-  "neighborCountCap",
   "centerAttraction",
   "massVariance",
   "velocityBiasWeight",
@@ -177,13 +175,6 @@ export const RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS: Record<
     step: 0.01,
     tooltip: "How sharply friction slows motion over time.",
   },
-  neighborCountCap: {
-    label: "Neighbor Attention",
-    min: 1,
-    max: 256,
-    step: 1,
-    tooltip: "Maximum nearby dots each dot reacts to per frame.",
-  },
   centerAttraction: {
     label: "Center Pull",
     min: 0,
@@ -238,7 +229,6 @@ export const DEFAULT_RANDOM_WALK_WORLD_PHYSICS_PARAMS: RandomWalkWorldPhysicsPar
   separationRadius: 0.7,
   maxSpeedMultiplier: 3,
   velocityDampingCurve: 1,
-  neighborCountCap: 64,
   centerAttraction: 0,
   massVariance: 0,
   velocityBiasWeight: 0.25,
@@ -304,12 +294,6 @@ export function clampRandomWalkWorldPhysicsParams(
       Math.max(
         RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.velocityDampingCurve.min,
         params.velocityDampingCurve,
-      ),
-    ),
-    neighborCountCap: Math.round(
-      Math.min(
-        RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCountCap.max,
-        Math.max(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS.neighborCountCap.min, params.neighborCountCap),
       ),
     ),
     centerAttraction: Math.min(
