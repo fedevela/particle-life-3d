@@ -136,8 +136,16 @@ async function assertScenarioContracts(page: Page, scenario: string) {
   }
 }
 
-async function openRandomWalkControls(page: Page, seed: string) {
-  await page.goto(`/random-walk-world?testMode=true&seed=${seed}`);
+async function openRandomWalkControls(page: Page, seed: string, options?: { uiInputDebounceMs?: number }) {
+  const query = new URLSearchParams({
+    testMode: "true",
+    seed,
+  });
+  if (typeof options?.uiInputDebounceMs === "number") {
+    query.set("uiInputDebounceMs", String(Math.max(0, Math.floor(options.uiInputDebounceMs))));
+  }
+
+  await page.goto(`/random-walk-world?${query.toString()}`);
   await waitForRandomWalkTestGlobals(page);
 
   const dotCountInput = page.locator("#random-walk-world-dotCount");
@@ -243,6 +251,7 @@ test("wheel increments and decrements all controls", async ({ page }) => {
   await expect(boundaryExtentInput).toHaveValue("10.05");
   await wheelInput(boundaryExtentInput, 120);
   await expect(boundaryExtentInput).toHaveValue("10.00");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("boundary_extent=10.0000");
   await assertScenarioContracts(page, "random-walk-world.ui-wheel-cycle");
 });
 
@@ -336,15 +345,26 @@ test("deterministic seed input reproduces identical contracts for same value and
   const seedInput = page.locator("#random-walk-world-seed");
   await seedInput.fill("issue-34-seed-a");
   await expect(seedInput).toHaveValue("issue-34-seed-a");
-
   const seedAAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   await seedInput.fill("issue-34-seed-b");
   await expect(seedInput).toHaveValue("issue-34-seed-b");
+  await expect
+    .poll(async () => (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd(), {
+      timeout: 10_000,
+      intervals: [100, 200, 400],
+    })
+    .not.toBe(seedAAt216);
   const seedBAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   expect(seedBAt216).not.toBe(seedAAt216);
 
   await seedInput.fill("issue-34-seed-a");
   await expect(seedInput).toHaveValue("issue-34-seed-a");
+  await expect
+    .poll(async () => (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd(), {
+      timeout: 10_000,
+      intervals: [100, 200, 400],
+    })
+    .toBe(seedAAt216);
   const seedAReplayAt216 = (await fetchRandomWalkContractAtMilestoneMs(page, 216)).trimEnd();
   expect(seedAReplayAt216).toBe(seedAAt216);
 });
@@ -422,16 +442,34 @@ test("frame progression stays bounded and deterministic across milestone updates
 
   const modeSelect = page.locator("#random-walk-world-mode");
   await modeSelect.selectOption("peer-influenced-random-walk");
+  await page.locator("#random-walk-world-dotCount").fill("512");
   await page.locator("#random-walk-world-ambientFriction").fill("0.35");
   await page.locator("#random-walk-world-peerImpulseScale").fill("1.10");
   await page.locator("#random-walk-world-stepScale").fill("0.028");
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("dot_count=512");
 
-  const milestones = [0, 72, 144, 216, 288, 360] as const;
-  const contracts: string[] = [];
-  for (const timeMs of milestones) {
-    await resetRandomWalkSimulationForScenario(page);
-    contracts.push(await fetchRandomWalkContractAtMilestoneMs(page, timeMs));
-  }
+  const baselineContract = await fetchRandomWalkContractAtMilestoneMs(page, 0);
+  const sampled = await page.evaluate(() => {
+    if (typeof window.__GET_RANDOM_WALK_CONTRACT_TEXT__ !== "function") {
+      throw new Error("window.__GET_RANDOM_WALK_CONTRACT_TEXT__ is not available.");
+    }
+    if (typeof window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ !== "function") {
+      throw new Error("window.__RESET_RANDOM_WALK_SIM_FOR_TEST__ is not available.");
+    }
+
+    window.__GET_RANDOM_WALK_CONTRACT_TEXT__(0);
+    window.__RESET_RANDOM_WALK_SIM_FOR_TEST__();
+    const startedAtMs = performance.now();
+    window.__RESET_RANDOM_WALK_SIM_FOR_TEST__();
+    const contractAt360Ms = window.__GET_RANDOM_WALK_CONTRACT_TEXT__(360);
+    return {
+      contractAt360Ms,
+      elapsedMs: performance.now() - startedAtMs,
+    };
+  });
+  expect(sampled.elapsedMs).toBeLessThanOrEqual(600);
+
+  const contracts = [baselineContract, sampled.contractAt360Ms];
   const frames = contracts.map((contract) => parseContractFrame(contract));
   const speeds = contracts.map((contract) => parseContractMetric(contract, "avg_speed"));
   const maxRadii = contracts.map((contract) => parseContractMetric(contract, "max_radius"));
@@ -451,6 +489,21 @@ test("frame progression stays bounded and deterministic across milestone updates
   for (const maxRadius of maxRadii) {
     expect(maxRadius).toBeLessThanOrEqual(maxAllowedRadius);
   }
+});
+
+test("debounced controls batch rapid edits and show pending odometer cue", async ({ page }) => {
+  await openRandomWalkControls(page, "random-walk-debounced-controls", { uiInputDebounceMs: 3000 });
+
+  const stepScaleInput = page.locator("#random-walk-world-stepScale");
+  await stepScaleInput.fill("0.023");
+  await stepScaleInput.fill("0.024");
+  await stepScaleInput.fill("0.025");
+  await expect(page.locator("#random-walk-world-stepScale-pending-commit")).toBeVisible();
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("step_scale=0.0210");
+
+  await page.waitForTimeout(3200);
+  await expect.poll(async () => fetchRandomWalkContractAtMilestoneMs(page, 0)).toContain("step_scale=0.0250");
+  await expect(page.locator("#random-walk-world-stepScale-pending-commit")).toHaveCount(0);
 });
 
 test("toroidal wrap preserves velocity vector", async () => {

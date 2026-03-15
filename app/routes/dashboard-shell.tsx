@@ -1,8 +1,15 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Orbit, Sparkles } from "lucide-react";
-import { useRef, type WheelEvent } from "react";
+import { useMemo, useRef, type WheelEvent } from "react";
 import { NavLink, Outlet } from "react-router";
 
+import {
+  NumericControlField,
+  SelectControlField,
+  TextControlField,
+  applyWheelStep,
+  formatValueForStep,
+} from "~/features/3d/dashboard-shell/control-fields";
 import { cn } from "~/lib/cn";
 import {
   HELLO_SHADER_WORLD_MOVEMENT_CONTROLS,
@@ -34,42 +41,21 @@ const RANDOM_WALK_BOUNDARY_MODE_LABELS: Record<(typeof RANDOM_WALK_WORLD_BOUNDAR
   "bounce-back": "Bounce Back",
   "edge-trap": "Edge Trap",
 };
+const DEFAULT_CONTROL_COMMIT_DELAY_MS = 3000;
 
-function getDecimals(step: number) {
-  const text = step.toString();
-  const dotIndex = text.indexOf(".");
-  return dotIndex === -1 ? 0 : text.length - dotIndex - 1;
-}
-
-function applyWheelStep(current: number, step: number, min: number | null, max: number | null, deltaY: number) {
-  const direction = deltaY < 0 ? 1 : -1;
-  let next = current + direction * step;
-
-  if (min !== null) {
-    next = Math.max(min, next);
+function resolveControlCommitDelayMs() {
+  if (typeof window === "undefined") {
+    return DEFAULT_CONTROL_COMMIT_DELAY_MS;
   }
 
-  if (max !== null) {
-    next = Math.min(max, next);
+  const searchParams = new URLSearchParams(window.location.search);
+  const rawOverride = searchParams.get("uiInputDebounceMs");
+  const overrideMs = rawOverride === null ? Number.NaN : Number.parseInt(rawOverride, 10);
+  if (Number.isFinite(overrideMs) && overrideMs >= 0) {
+    return overrideMs;
   }
 
-  const scale = 10 ** getDecimals(step);
-  return Math.round(next * scale) / scale;
-}
-
-function getMovementInputValue(key: HelloShaderWorldMovementParamKey, value: number) {
-  const decimals = getDecimals(HELLO_SHADER_WORLD_MOVEMENT_CONTROLS[key].step);
-  return value.toFixed(decimals);
-}
-
-function getRandomWalkInputValue(key: RandomWalkWorldParamKey, value: number) {
-  const decimals = getDecimals(RANDOM_WALK_WORLD_PARAM_CONTROLS[key].step);
-  return value.toFixed(decimals);
-}
-
-function getRandomWalkPhysicsInputValue(key: RandomWalkWorldPhysicsParamKey, value: number) {
-  const decimals = getDecimals(RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key].step);
-  return value.toFixed(decimals);
+  return searchParams.get("testMode") === "true" ? 0 : DEFAULT_CONTROL_COMMIT_DELAY_MS;
 }
 
 /**
@@ -99,6 +85,7 @@ export default function DashboardShell() {
   const setRandomWalkWorldBoundaryMode = useUiStore((state) => state.setRandomWalkWorldBoundaryMode);
   const setRandomWalkWorldPhysicsParam = useUiStore((state) => state.setRandomWalkWorldPhysicsParam);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
+  const controlCommitDelayMs = useMemo(() => resolveControlCommitDelayMs(), []);
 
   function queueAction(type: "add" | "remove") {
     const rawAmount = amountInputRef.current?.value ?? helloShaderWorldAmountInput;
@@ -256,28 +243,19 @@ export default function DashboardShell() {
                     {HELLO_SHADER_WORLD_MOVEMENT_PARAM_ORDER.map((key) => {
                       const control = HELLO_SHADER_WORLD_MOVEMENT_CONTROLS[key];
                       return (
-                        <div key={key} className="space-y-1">
-                          <label
-                            className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                            htmlFor={`hello-shader-world-${key}`}
-                            title={control.tooltip}
-                          >
-                            {control.label}
-                          </label>
-                          <input
-                            id={`hello-shader-world-${key}`}
-                            type="number"
-                            inputMode="decimal"
-                            min={control.min}
-                            max={control.max}
-                            step={control.step}
-                            title={control.tooltip}
-                            value={getMovementInputValue(key, helloShaderWorldMovementParams[key])}
-                            onChange={(event) => setHelloShaderWorldMovementParam(key, event.target.value)}
-                            onWheel={(event) => handleMovementWheel(key, event)}
-                            className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                          />
-                        </div>
+                        <NumericControlField
+                          key={key}
+                          id={`hello-shader-world-${key}`}
+                          label={control.label}
+                          tooltip={control.tooltip}
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={formatValueForStep(helloShaderWorldMovementParams[key], control.step)}
+                          onChange={(value) => setHelloShaderWorldMovementParam(key, value)}
+                          onWheel={(event) => handleMovementWheel(key, event)}
+                          commitDelayMs={controlCommitDelayMs}
+                        />
                       );
                     })}
                   </div>
@@ -313,124 +291,79 @@ export default function DashboardShell() {
                 <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Simulation Controls</p>
                   <div className="space-y-1 border-t border-cyan-900/40 pt-2">
-                    <label
-                      className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                      htmlFor={RANDOM_WALK_WORLD_SEED_INPUT_ID}
-                      title={RANDOM_WALK_WORLD_SEED_CONTROL.tooltip}
-                    >
-                      {RANDOM_WALK_WORLD_SEED_CONTROL.label}
-                    </label>
-                    <input
+                    <TextControlField
                       id={RANDOM_WALK_WORLD_SEED_INPUT_ID}
-                      type="text"
-                      title={RANDOM_WALK_WORLD_SEED_CONTROL.tooltip}
+                      label={RANDOM_WALK_WORLD_SEED_CONTROL.label}
+                      tooltip={RANDOM_WALK_WORLD_SEED_CONTROL.tooltip}
                       placeholder={RANDOM_WALK_WORLD_SEED_CONTROL.placeholder}
                       value={randomWalkWorldSeedInput}
-                      onChange={(event) => setRandomWalkWorldSeedInput(event.target.value)}
-                      className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                      onChange={(value) => setRandomWalkWorldSeedInput(value)}
+                      commitDelayMs={controlCommitDelayMs}
                     />
                   </div>
                   <div className="space-y-2 border-t border-cyan-900/40 pt-2">
                     {RANDOM_WALK_WORLD_PARAM_ORDER.map((key) => {
                       const control = RANDOM_WALK_WORLD_PARAM_CONTROLS[key];
                       return (
-                        <div key={key} className="space-y-1">
-                          <label
-                            className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                            htmlFor={`random-walk-world-${key}`}
-                            title={control.tooltip}
-                          >
-                            {control.label}
-                          </label>
-                          <input
-                            id={`random-walk-world-${key}`}
-                            type="number"
-                            inputMode="decimal"
-                            min={control.min}
-                            max={control.max}
-                            step={control.step}
-                            title={control.tooltip}
-                            value={getRandomWalkInputValue(key, randomWalkWorldParams[key])}
-                            onChange={(event) => setRandomWalkWorldParam(key, event.target.value)}
-                            onWheel={(event) => handleRandomWalkWheel(key, event)}
-                            className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                          />
-                        </div>
+                        <NumericControlField
+                          key={key}
+                          id={`random-walk-world-${key}`}
+                          label={control.label}
+                          tooltip={control.tooltip}
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={formatValueForStep(randomWalkWorldParams[key], control.step)}
+                          onChange={(value) => setRandomWalkWorldParam(key, value)}
+                          onWheel={(event) => handleRandomWalkWheel(key, event)}
+                          commitDelayMs={controlCommitDelayMs}
+                        />
                       );
                     })}
                   </div>
                   <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-300">Neighbor behavior controls</p>
                   <div className="space-y-2 border-t border-cyan-900/40 pt-2">
-                    <div className="space-y-1">
-                      <label
-                        className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                        htmlFor="random-walk-world-mode"
-                        title="Choose classic movement or movement that reacts to nearby neighbors."
-                      >
-                        Physics Mode
-                      </label>
-                      <select
-                        id="random-walk-world-mode"
-                        value={randomWalkWorldPhysicsParams.mode}
-                        onChange={(event) => setRandomWalkWorldPhysicsMode(event.target.value as typeof randomWalkWorldPhysicsParams.mode)}
-                        className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                      >
-                        {RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.map((mode) => (
-                          <option key={mode} value={mode}>
-                            {RANDOM_WALK_MODE_LABELS[mode]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label
-                        className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                        htmlFor="random-walk-world-boundaryMode"
-                        title="Choose how dots behave when they reach the world edge."
-                      >
-                        Edge Behavior
-                      </label>
-                      <select
-                        id="random-walk-world-boundaryMode"
-                        value={randomWalkWorldPhysicsParams.boundaryMode}
-                        onChange={(event) =>
-                          setRandomWalkWorldBoundaryMode(event.target.value as typeof randomWalkWorldPhysicsParams.boundaryMode)
-                        }
-                        className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                      >
-                        {RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS.map((boundaryMode) => (
-                          <option key={boundaryMode} value={boundaryMode}>
-                            {RANDOM_WALK_BOUNDARY_MODE_LABELS[boundaryMode]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SelectControlField
+                      id="random-walk-world-mode"
+                      label="Physics Mode"
+                      tooltip="Choose classic movement or movement that reacts to nearby neighbors."
+                      value={randomWalkWorldPhysicsParams.mode}
+                      onChange={(value) => setRandomWalkWorldPhysicsMode(value as typeof randomWalkWorldPhysicsParams.mode)}
+                      options={RANDOM_WALK_WORLD_PHYSICS_MODE_OPTIONS.map((mode) => ({
+                        value: mode,
+                        label: RANDOM_WALK_MODE_LABELS[mode],
+                      }))}
+                      commitDelayMs={controlCommitDelayMs}
+                    />
+                    <SelectControlField
+                      id="random-walk-world-boundaryMode"
+                      label="Edge Behavior"
+                      tooltip="Choose how dots behave when they reach the world edge."
+                      value={randomWalkWorldPhysicsParams.boundaryMode}
+                      onChange={(value) => setRandomWalkWorldBoundaryMode(value as typeof randomWalkWorldPhysicsParams.boundaryMode)}
+                      options={RANDOM_WALK_WORLD_BOUNDARY_MODE_OPTIONS.map((boundaryMode) => ({
+                        value: boundaryMode,
+                        label: RANDOM_WALK_BOUNDARY_MODE_LABELS[boundaryMode],
+                      }))}
+                      commitDelayMs={controlCommitDelayMs}
+                    />
                     {randomWalkWorldPhysicsParams.mode === "peer-influenced-random-walk" ? (
                       RANDOM_WALK_WORLD_PHYSICS_PARAM_ORDER.map((key) => {
                         const control = RANDOM_WALK_WORLD_PHYSICS_PARAM_CONTROLS[key];
                         return (
-                          <div key={key} className="space-y-1">
-                            <label
-                              className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                              htmlFor={`random-walk-world-${key}`}
-                              title={control.tooltip}
-                            >
-                              {control.label}
-                            </label>
-                            <input
-                              id={`random-walk-world-${key}`}
-                              type="number"
-                              inputMode="decimal"
-                              min={control.min}
-                              max={control.max}
-                              step={control.step}
-                              title={control.tooltip}
-                              value={getRandomWalkPhysicsInputValue(key, randomWalkWorldPhysicsParams[key])}
-                              onChange={(event) => setRandomWalkWorldPhysicsParam(key, event.target.value)}
-                              onWheel={(event) => handleRandomWalkPhysicsWheel(key, event)}
-                              className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                            />
-                          </div>
+                          <NumericControlField
+                            key={key}
+                            id={`random-walk-world-${key}`}
+                            label={control.label}
+                            tooltip={control.tooltip}
+                            min={control.min}
+                            max={control.max}
+                            step={control.step}
+                            value={formatValueForStep(randomWalkWorldPhysicsParams[key], control.step)}
+                            onChange={(value) => setRandomWalkWorldPhysicsParam(key, value)}
+                            onWheel={(event) => handleRandomWalkPhysicsWheel(key, event)}
+                            commitDelayMs={controlCommitDelayMs}
+                          />
                         );
                       })
                     ) : (
