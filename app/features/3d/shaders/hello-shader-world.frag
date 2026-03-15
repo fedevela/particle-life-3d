@@ -2,10 +2,14 @@
 uniform vec3 uColorA;
 
 void main() {
+  // logic: calculate distance from the center of the point coordinate (0.0 to 1.0)
   float distanceToCenter = distance(gl_PointCoord, vec2(0.5));
+  
+  // logic: discard fragments outside the 0.5 radius to render a circular point
   if (distanceToCenter > 0.5) {
     discard;
   }
 
+  // logic: set the final fragment color using the particle color uniform
   gl_FragColor = vec4(uColorA, 1.0);
 }
