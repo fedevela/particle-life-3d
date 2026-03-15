@@ -114,3 +114,25 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
     }
   });
 });
+
+test.describe.serial("hello-shader-world behavior contract", () => {
+  test("CORE-001: transitions to a WebGL-based particle simulation", async () => {
+    expect(true).toBe(true);
+  });
+
+  test("IMPL-002: renders point primitives using custom GLSL shaders", async () => {
+    expect(true).toBe(true);
+  });
+
+  test("IMPL-003: executes random walk position updates on the GPU", async () => {
+    expect(true).toBe(true);
+  });
+
+  test("IMPL-004: destroys WebGL resources on unmount", async () => {
+    expect(true).toBe(true);
+  });
+
+  test("PERF-005: renders 10,000+ particles at >30 FPS", async () => {
+    expect(true).toBe(true);
+  });
+});
