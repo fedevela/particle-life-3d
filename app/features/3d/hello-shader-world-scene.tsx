@@ -197,7 +197,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
             <primitive attach="attributes-aReference" object={referenceAttribute} />
             <primitive attach="attributes-aActive" object={activeAttribute} />
           </bufferGeometry>
-          <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} />
+          <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniforms} transparent={true} />
         </points>
       ) : null}
       <OrbitControls />

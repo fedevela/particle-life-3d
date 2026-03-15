@@ -10,6 +10,9 @@ void main() {
     discard;
   }
 
+  // logic: apply a small smoothstep at the edge to reduce aliasing
+  float alpha = smoothstep(0.5, 0.48, distanceToCenter);
+
   // logic: set the final fragment color using the particle color uniform
-  gl_FragColor = vec4(uColorA, 1.0);
+  gl_FragColor = vec4(uColorA, alpha);
 }

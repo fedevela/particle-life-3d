@@ -13,7 +13,12 @@ vec4 projectSimulationPosition(vec2 statePos) {
 }
 
 // logic: perspective-aware point size calculation
-float calculatePointSize(vec4 viewPosition) {
+float calculatePointSize(vec2 statePos) {
+  // We need the viewPosition to calculate size based on distance from camera
+  vec3 simulationPosition = vec3(statePos * 4.0, 0.0);
+  vec4 modelPosition = modelMatrix * vec4(simulationPosition, 1.0);
+  vec4 viewPosition = viewMatrix * modelPosition;
+  
   // Perspective scale: points get smaller as they move away from the camera
   return 120.0 * (1.0 / -viewPosition.z);
 }
@@ -30,10 +35,6 @@ void main() {
   vec4 state = texture2D(uState, aReference);
   
   // logic: map state to projection
-  vec3 simulationPosition = vec3(state.xy * 4.0, 0.0);
-  vec4 modelPosition = modelMatrix * vec4(simulationPosition, 1.0);
-  vec4 viewPosition = viewMatrix * modelPosition;
-  
-  gl_Position = projectionMatrix * viewPosition;
-  gl_PointSize = calculatePointSize(viewPosition);
+  gl_Position = projectSimulationPosition(state.xy);
+  gl_PointSize = calculatePointSize(state.xy);
 }
