@@ -2,42 +2,58 @@
 
 This file applies to the entire repository.
 
-## Mission
+## Core Mission: Deterministic GPU-in-E2E
 
-`particle-life-3d` is a contract-first 3D app. Every meaningful behavior is expected to be:
+`particle-life-3d` is contract-first. The key guarantee is not visual polish; it is deterministic behavior captured as text and enforced in tests.
 
-1. deterministic enough to describe as text, and
-2. testable through typed seams instead of UI scraping hacks.
+The reference pattern is `hello-shader-world`: GPU state is stepped in WebGL, read back, serialized into stable text, and asserted against committed fixtures in Playwright. That loop is the platform.
 
-Protect those properties first. Fancy rendering is a feature; reproducible behavior is the platform.
+## Canonical Deterministic Loop (`hello-shader-world`)
+
+1. `app/routes/hello-shader-world.tsx` stays thin and only mounts the feature page.
+2. `app/features/3d/hello-shader-world/hello-shader-world-page.tsx` resolves `testMode` + `seed` and exposes test APIs on `window` only in `testMode`.
+3. `app/features/3d/hello-shader-world/hello-shader-world-scene.tsx` owns the WebGL scene and simulation lifecycle.
+4. `app/features/3d/hello-shader-world/hello-shader-world-simulation.ts` steps GPU state with `GPUComputationRenderer` and captures milestone snapshots via `readRenderTargetPixels`.
+5. `app/features/3d/hello-shader-world/hello-shader-world-contract.ts` converts readback buffers into deterministic contract text with stable checksums.
+6. `tests/hello-shader-world/hello-shader-world.contract.spec.ts` reads that text through test globals and compares exact output to fixture text files.
+
+Important clarification: app runtime does not write fixture files. Tests compare runtime-generated text with committed files under `tests/.../contracts/`.
 
 ## Runtime Surfaces You Must Preserve
 
 - `hello-world`
   - SQLite (WASM + OPFS) persistence in a dedicated Web Worker.
-  - Contract tests validate raw database text after deterministic camera actions.
+  - Contract tests validate raw DB text after deterministic camera actions.
 - `hello-shader-world`
-  - GPU simulation with milestone contracts at exact frames.
-  - Contract tests validate deterministic shader output text, not pixels.
+  - GPU simulation with milestone text contracts at exact frames.
+  - E2E validates GPU-derived text, not pixels.
 - `random-walk-world`
-  - Deterministic random walk simulation with text contracts at exact millisecond milestones.
-  - UI tests enforce input, wheel-step, and clamp behavior.
+  - Deterministic simulation with text contracts at exact millisecond milestones.
+  - UI tests enforce input behavior, wheel-step behavior, clamp behavior, and camera continuity.
 
 ## Read Order Before Non-Trivial Changes
 
 1. `README.md`
 2. `app/routes.ts`
-3. The route + feature + test files for the target surface
+3. Route + feature + test files for the target surface
+4. If touching GPU determinism, always read:
+   - `app/routes/hello-shader-world.tsx`
+   - `app/features/3d/hello-shader-world/hello-shader-world-page.tsx`
+   - `app/features/3d/hello-shader-world/hello-shader-world-scene.tsx`
+   - `app/features/3d/hello-shader-world/hello-shader-world-simulation.ts`
+   - `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`
+   - `tests/hello-shader-world/hello-shader-world.contract.spec.ts`
 
 ## Guardrails
 
-- Keep `app/routes/` modules thin. Put logic in `app/features/3d/` or lower layers.
-- UI must never speak directly to the worker. Use `app/db/client-bridge/bridge.ts`.
+- Keep `app/routes/` modules thin; place behavior in `app/features/3d/` or lower layers.
+- Preserve `testMode` query-param gates and test globals; these are deterministic seams, not test hacks.
+- Never replace text contracts with image/pixel snapshots.
+- Keep browser guards around `window`, `localStorage`, `Worker`, OPFS, and other browser-only APIs.
+- UI must never call DB worker internals directly; use `app/db/client-bridge/bridge.ts`.
 - Treat `app/db/worker/messages.ts` as the canonical main-thread/worker contract.
-- Preserve browser guards around `window`, `localStorage`, `Worker`, OPFS, and related browser-only APIs.
-- Keep persisted data scoped by `projectId`; test isolation depends on this.
-- Extend typed flows; do not add side channels that bypass the existing architecture.
-- Preserve `testMode` query-param gates for test-only globals.
+- Keep persisted data scoped by `projectId` to preserve test isolation.
+- Extend typed seams; do not add side channels that bypass existing architecture.
 
 ## Safe Change Paths
 
@@ -68,18 +84,18 @@ npm run test:e2e:random-walk-world
 npm run build
 ```
 
-### Shader contract focus (fastest relevant pass)
+### Fast GPU contract verification
 
 ```bash
 npm run test:e2e:hello-shader-world
 ```
 
-What this actually validates:
+What this validates:
 
 - route boots in `testMode`,
-- shader test APIs are exposed on `window`,
+- shader test globals exist on `window`,
 - simulation reset works,
-- milestone contracts exactly match fixtures in:
+- GPU milestone contracts match fixtures exactly:
   - `tests/hello-shader-world/contracts/hello-shader-world.frame-000.txt`
   - `tests/hello-shader-world/contracts/hello-shader-world.frame-030.txt`
   - `tests/hello-shader-world/contracts/hello-shader-world.frame-060.txt`
@@ -104,8 +120,9 @@ What this actually validates:
 
 ### Fixture update policy
 
-- Only update fixtures when behavior changes are intentional and reviewed.
-- Keep raw-text comparisons intact. Do not replace with pixel/image/canvas snapshots.
+- Update fixtures only for intentional behavior changes and review the diff.
+- Keep strict raw-text assertions unless a test explicitly allows `trimEnd()`.
+- Do not relax deterministic contracts to “visual looks right.”
 - Random-walk UI scenario contracts can be regenerated intentionally with:
 
 ```bash
@@ -116,46 +133,45 @@ Then rerun without the env var and confirm green.
 
 ## E2E Quirks That Matter
 
-- Playwright is intentionally single-worker (`workers: 1`) to reduce GPU nondeterminism.
-- Playwright launches Chromium with SwiftShader flags to keep WebGL available in CI/headless contexts.
-- Shader and random-walk tests poll for runtime globals before asserting contracts.
-- `hello-shader-world` movement controls live behind the sidebar submenu; tests open via the nav link.
-- `hello-world` contract tests require project cleanup via `__DELETE_PROJECT_DATA__` to avoid state bleed.
+- Playwright uses `workers: 1` to reduce GPU nondeterminism.
+- Playwright launches Chromium with SwiftShader flags for headless WebGL availability.
+- Shader and random-walk suites poll for runtime globals before assertions.
+- `hello-shader-world` controls are behind the sidebar submenu; tests open via nav.
+- `hello-world` contracts require `__DELETE_PROJECT_DATA__` cleanup to prevent state bleed.
 
 ## Test Invariants (Non-Negotiable)
 
 - `tests/hello-world/hello-world.contract.spec.ts` validates raw DB contract text.
-- `tests/hello-shader-world/hello-shader-world.contract.spec.ts` validates deterministic shader text contracts.
+- `tests/hello-shader-world/hello-shader-world.contract.spec.ts` validates deterministic GPU text contracts.
 - `tests/random-walk-world/random-walk-world.contract.spec.ts` validates deterministic random-walk text contracts.
-- `tests/random-walk-world/random-walk-world.ui.spec.ts` validates random-walk UI controls, seed determinism, camera continuity, and bounded frame progression.
-- Contract assertions are strict text equality unless a test explicitly uses `trimEnd()`.
-- If route structure or types change, run `npm run typecheck` (it regenerates route types).
+- `tests/random-walk-world/random-walk-world.ui.spec.ts` validates controls, seed determinism, camera continuity, and bounded frame progression.
+- `tests/random-walk-world/random-walk-world.basic-universe.contract.spec.ts` validates baseline minimum-dot-count universe contracts.
+- If route structure or route types drift, run `npm run typecheck`.
 
 ## High-Value Files
 
-- `app/routes.ts`: route tree
-- `app/features/3d/hello-world/particle-page.tsx`: hello-world page + DB test API exposure
-- `app/features/3d/hello-world/camera-persistence-controls.tsx`: camera restore/persist + test actions
-- `app/features/3d/hello-shader-world/hello-shader-world-page.tsx`: shader page + test API wiring
-- `app/features/3d/hello-shader-world/hello-shader-world-simulation.ts`: deterministic GPU stepping + milestone capture
-- `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`: shader contract text generation
-- `app/features/3d/random-walk-world/random-walk-world-page.tsx`: random-walk page + test API wiring
-- `app/features/3d/random-walk-world/random-walk-world-simulation.ts`: simulation orchestrator and frame stepping
-- `app/features/3d/random-walk-world/simulation/random-walk-parameter-runtime.ts`: seed resolution + realtime physics sync + frame progression assessment seams
-- `app/features/3d/random-walk-world/simulation/random-walk-simulation-contract.ts`: deterministic random-walk contract text generation
-- `app/features/3d/random-walk-world/simulation/random-walk-simulation-rng.ts`: seed hashing and deterministic RNG stepping
-- `app/features/3d/random-walk-world/random-walk-peer-influence.architecture.ts`: peer-influence architecture port entrypoint
-- `app/features/3d/random-walk-world/peer-influence/contracts.ts`: typed CH-004/005/005-A/008 contract and pseudocode artifacts
-- `app/features/3d/random-walk-world/peer-influence/runtime.ts`: peer-influence runtime derivation functions
-- `app/db/client-bridge/bridge.ts`: browser-to-worker persistence seam
-- `app/db/worker/messages.ts`: worker contract types
-- `app/db/worker/worker.ts`: request handling and SQLite runtime
-- `app/db/worker/sqlite-repository.ts`: schema, migration, deterministic contract text
-- `playwright.config.ts`: web server, GPU flags, and runner behavior
+- `app/routes.ts`
+- `app/routes/hello-shader-world.tsx`
+- `app/features/3d/hello-world/particle-page.tsx`
+- `app/features/3d/hello-world/camera-persistence-controls.tsx`
+- `app/features/3d/hello-shader-world/hello-shader-world-page.tsx`
+- `app/features/3d/hello-shader-world/hello-shader-world-scene.tsx`
+- `app/features/3d/hello-shader-world/hello-shader-world-simulation.ts`
+- `app/features/3d/hello-shader-world/hello-shader-world-contract.ts`
+- `app/features/3d/random-walk-world/random-walk-world-page.tsx`
+- `app/features/3d/random-walk-world/random-walk-world-simulation.ts`
+- `app/features/3d/random-walk-world/simulation/random-walk-parameter-runtime.ts`
+- `app/features/3d/random-walk-world/simulation/random-walk-simulation-contract.ts`
+- `app/features/3d/random-walk-world/simulation/random-walk-simulation-rng.ts`
+- `app/features/3d/random-walk-world/peer-influence/contracts.ts`
+- `app/features/3d/random-walk-world/peer-influence/runtime.ts`
+- `app/db/client-bridge/bridge.ts`
+- `app/db/worker/messages.ts`
+- `app/db/worker/worker.ts`
+- `app/db/worker/sqlite-repository.ts`
+- `playwright.config.ts`
 
 ## Local Repo Guides
 
-Use when relevant:
-
-- `skills/e2e_implementation.md`: raw DB-text contract testing approach for hello-world
-- `skills/create_user_stories_from_repo.md`: repository-based user story extraction workflow
+- `skills/e2e_implementation.md`: raw DB-text contract testing for `hello-world`
+- `skills/create_user_stories_from_repo.md`: repository-driven story extraction workflow
