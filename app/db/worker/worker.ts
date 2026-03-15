@@ -5,6 +5,7 @@ import type {
   CameraState,
   SimulationSnapshotUpsertInput,
   SpriteRecord,
+  SpriteUpsertInput,
   VariableRecord,
 } from "../types";
 import { createLogger } from "../../lib/logger";
@@ -108,22 +109,39 @@ type SqliteApi = {
 };
 
 /** Hold the initialized worker database connection. */
-let sqliteDb: SqliteDatabase | null = null;
+let workerSqliteDatabase: SqliteDatabase | null = null;
 /** Hold the typed repository wrapper around the SQLite connection. */
-let sqliteRepository: SqliteRepository | null = null;
+let workerSqliteRepository: SqliteRepository | null = null;
 /** Track which tables currently have active subscriptions. */
-const subscribedTables = new Set<DbTable>();
+const subscribedTablesByName = new Set<DbTable>();
 
 /** Post a worker response/event message to the main thread. */
-function postMessageToMain(message: WorkerResponse) {
+function postWorkerResponse(message: WorkerResponse) {
   self.postMessage(message);
 }
 
+type WorkerSuccessData = Extract<WorkerResponse, { type: "RESPONSE"; ok: true }>["data"];
+
+function postWorkerSuccessResponse(requestId: string, data: WorkerSuccessData) {
+  postWorkerResponse({
+    type: "RESPONSE",
+    requestId,
+    ok: true,
+    data,
+  });
+}
+
 /** Emit a table update event when that table is currently subscribed. */
-function emitTableUpdated(table: DbTable) {
-  if (subscribedTables.has(table)) {
+function emitSubscribedTableUpdate(table: DbTable) {
+  if (subscribedTablesByName.has(table)) {
     logger.debug("Emit table update event.", { table });
-    postMessageToMain({ type: "TABLE_UPDATED", table });
+    postWorkerResponse({ type: "TABLE_UPDATED", table });
+  }
+}
+
+function emitSubscribedTableUpdates(tables: DbTable[]) {
+  for (const table of tables) {
+    emitSubscribedTableUpdate(table);
   }
 }
 
@@ -141,8 +159,36 @@ function resolveSpriteId(candidateId: string | undefined) {
   return crypto.randomUUID();
 }
 
+function toSpriteRecord(payload: SpriteUpsertInput, recordId: string): SpriteRecord {
+  return {
+    id: recordId,
+    type: payload.type,
+    pos_x: payload.position[0],
+    pos_y: payload.position[1],
+    pos_z: payload.position[2],
+    metadata: stringifyJson(payload.metadata ?? {}, "sprite metadata"),
+  };
+}
+
+function upsertSpriteRecordForProject(
+  repository: SqliteRepository,
+  nextRecord: SpriteRecord,
+  projectId: string,
+) {
+  const existingId = repository.findSpriteId(nextRecord.id, projectId);
+  const operation = existingId !== null ? "update" : "insert";
+
+  if (existingId !== null) {
+    repository.updateSprite(nextRecord, projectId);
+  } else {
+    repository.insertSprite(nextRecord, projectId);
+  }
+
+  return operation;
+}
+
 /** Seed one default sprite for projects with no persisted sprites yet. */
-function ensureProjectSeeded(repository: SqliteRepository, projectId: string) {
+function ensureProjectHasSeedSprite(repository: SqliteRepository, projectId: string) {
   const spriteCount = repository.readSpriteCount(projectId);
 
   if (spriteCount > 0) {
@@ -164,8 +210,8 @@ function ensureProjectSeeded(repository: SqliteRepository, projectId: string) {
 }
 
 /** Initialize sqlite-wasm + OPFS and ensure schema/seed data exist. */
-async function initializeDatabase() {
-  if (sqliteRepository && sqliteDb) {
+async function initializeWorkerDatabase() {
+  if (workerSqliteRepository && workerSqliteDatabase) {
     logger.debug("Reuse existing SQLite database instance.");
     return;
   }
@@ -194,120 +240,80 @@ async function initializeDatabase() {
   repository.ensureSchema();
   logger.debug("Ensure SQLite schema.");
 
-  sqliteDb = db;
-  sqliteRepository = repository;
+  workerSqliteDatabase = db;
+  workerSqliteRepository = repository;
   logger.info("SQLite database initialization complete.");
 }
 
-async function getWorkerRepository() {
-  await initializeDatabase();
+async function getInitializedWorkerRepository() {
+  await initializeWorkerDatabase();
 
-  if (!sqliteRepository) {
+  if (!workerSqliteRepository) {
     repositoryError("Database unavailable after initialization.");
   }
 
-  return sqliteRepository;
+  return workerSqliteRepository;
 }
 
 /** Handle one typed request from the main thread. */
-async function handleRequest(message: WorkerRequest) {
+async function handleWorkerRequest(workerRequest: WorkerRequest) {
   logger.debug("Handle worker request.", {
-    requestType: message.type,
-    requestId: "requestId" in message ? message.requestId : null,
+    requestType: workerRequest.type,
+    requestId: "requestId" in workerRequest ? workerRequest.requestId : null,
   });
 
-  switch (message.type) {
+  switch (workerRequest.type) {
     case "INIT": {
-      await initializeDatabase();
-      logger.info("Complete INIT request.", { requestId: message.requestId });
-      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      await initializeWorkerDatabase();
+      logger.info("Complete INIT request.", { requestId: workerRequest.requestId });
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "GET_SPRITES": {
-      const repository = await getWorkerRepository();
-      ensureProjectSeeded(repository, message.projectId);
-      const sprites = repository.fetchSprites(message.projectId);
+      const repository = await getInitializedWorkerRepository();
+      ensureProjectHasSeedSprite(repository, workerRequest.projectId);
+      const sprites = repository.fetchSprites(workerRequest.projectId);
       logger.debug("Return sprites from repository.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
         spriteCount: sprites.length,
       });
 
-      postMessageToMain({
-        type: "RESPONSE",
-        requestId: message.requestId,
-        ok: true,
-        data: sprites,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, sprites);
       return;
     }
     case "upsert_sprite": {
-      const repository = await getWorkerRepository();
+      const repository = await getInitializedWorkerRepository();
 
-      const recordId = resolveSpriteId(message.payload.id);
-      const metadata = stringifyJson(message.payload.metadata ?? {}, "sprite metadata");
-
-      const nextRecord: SpriteRecord = {
-        id: recordId,
-        type: message.payload.type,
-        pos_x: message.payload.position[0],
-        pos_y: message.payload.position[1],
-        pos_z: message.payload.position[2],
-        metadata,
-      };
-
-      const existingId = repository.findSpriteId(recordId, message.projectId);
-      const operation = existingId !== null ? "update" : "insert";
-
-      if (existingId !== null) {
-        repository.updateSprite(nextRecord, message.projectId);
-      } else {
-        repository.insertSprite(nextRecord, message.projectId);
-      }
+      const recordId = resolveSpriteId(workerRequest.payload.id);
+      const nextRecord = toSpriteRecord(workerRequest.payload, recordId);
+      const operation = upsertSpriteRecordForProject(repository, nextRecord, workerRequest.projectId);
 
       logger.info("Persist single sprite.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
         spriteId: recordId,
         operation,
       });
 
-      emitTableUpdated("sprites");
-
-      postMessageToMain({
-        type: "RESPONSE",
-        requestId: message.requestId,
-        ok: true,
-        data: nextRecord,
-      });
+      emitSubscribedTableUpdate("sprites");
+      postWorkerSuccessResponse(workerRequest.requestId, nextRecord);
       return;
     }
     case "upsert_sprites": {
-      const repository = await getWorkerRepository();
+      const repository = await getInitializedWorkerRepository();
       const persistedRecords: SpriteRecord[] = [];
       let insertCount = 0;
       let updateCount = 0;
 
-      for (const nextSprite of message.payload) {
+      for (const nextSprite of workerRequest.payload) {
         const recordId = resolveSpriteId(nextSprite.id);
-        const metadata = stringifyJson(nextSprite.metadata ?? {}, "sprite metadata");
+        const nextRecord = toSpriteRecord(nextSprite, recordId);
+        const operation = upsertSpriteRecordForProject(repository, nextRecord, workerRequest.projectId);
 
-        const nextRecord: SpriteRecord = {
-          id: recordId,
-          type: nextSprite.type,
-          pos_x: nextSprite.position[0],
-          pos_y: nextSprite.position[1],
-          pos_z: nextSprite.position[2],
-          metadata,
-        };
-
-        const existingId = repository.findSpriteId(recordId, message.projectId);
-
-        if (existingId !== null) {
-          repository.updateSprite(nextRecord, message.projectId);
+        if (operation === "update") {
           updateCount += 1;
         } else {
-          repository.insertSprite(nextRecord, message.projectId);
           insertCount += 1;
         }
 
@@ -315,161 +321,141 @@ async function handleRequest(message: WorkerRequest) {
       }
 
       if (persistedRecords.length > 0) {
-        emitTableUpdated("sprites");
+        emitSubscribedTableUpdate("sprites");
       }
 
       logger.info("Persist sprite batch.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
-        patchSize: message.payload.length,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
+        patchSize: workerRequest.payload.length,
         persistedCount: persistedRecords.length,
         insertCount,
         updateCount,
       });
 
-      postMessageToMain({
-        type: "RESPONSE",
-        requestId: message.requestId,
-        ok: true,
-        data: persistedRecords,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, persistedRecords);
       return;
     }
     case "GET_CAMERA_STATE": {
-      const repository = await getWorkerRepository();
-      const cameraVariable = repository.findVariableByName(CAMERA_STATE_NAME, message.projectId);
+      const repository = await getInitializedWorkerRepository();
+      const cameraVariable = repository.findVariableByName(CAMERA_STATE_NAME, workerRequest.projectId);
 
       const parsed = cameraVariable ? parseCameraState(cameraVariable.value) : null;
       logger.debug("Return camera state.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
         hasCameraState: parsed !== null,
       });
 
-      postMessageToMain({
-        type: "RESPONSE",
-        requestId: message.requestId,
-        ok: true,
-        data: parsed,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, parsed);
       return;
     }
     case "SAVE_CAMERA_STATE": {
-      const repository = await getWorkerRepository();
+      const repository = await getInitializedWorkerRepository();
 
-      const existing = repository.findVariableByName(CAMERA_STATE_NAME, message.projectId);
+      const existing = repository.findVariableByName(CAMERA_STATE_NAME, workerRequest.projectId);
 
       const record: VariableRecord = {
         id: existing !== null ? existing.id : crypto.randomUUID(),
         name: CAMERA_STATE_NAME,
-        value: stringifyJson(message.payload, "camera state"),
+        value: stringifyJson(workerRequest.payload, "camera state"),
       };
 
       if (existing) {
-        repository.updateVariableValue(record, message.projectId);
+        repository.updateVariableValue(record, workerRequest.projectId);
       } else {
-        repository.insertVariable(record, message.projectId);
+        repository.insertVariable(record, workerRequest.projectId);
       }
 
       logger.info("Persist camera state.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
         operation: existing ? "update" : "insert",
       });
 
-      emitTableUpdated("variables");
-
-      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      emitSubscribedTableUpdate("variables");
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "SAVE_SIMULATION_SNAPSHOT": {
-      const repository = await getWorkerRepository();
-      const normalizedPayload = validateSimulationSnapshotPayload(message.payload);
-      repository.upsertSimulationSnapshot(normalizedPayload, message.projectId);
+      const repository = await getInitializedWorkerRepository();
+      const normalizedPayload = validateSimulationSnapshotPayload(workerRequest.payload);
+      repository.upsertSimulationSnapshot(normalizedPayload, workerRequest.projectId);
 
       logger.info("Persist simulation milestone snapshot.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
         milestoneId: normalizedPayload.milestoneId,
         frame: normalizedPayload.frame,
       });
 
-      emitTableUpdated("simulation_snapshots");
-
-      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      emitSubscribedTableUpdate("simulation_snapshots");
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "GET_PROJECT_CONTRACT_TEXT": {
-      const repository = await getWorkerRepository();
-      ensureProjectSeeded(repository, message.projectId);
-      const contractText = repository.getProjectContractText(message.projectId, message.scope ?? "all");
+      const repository = await getInitializedWorkerRepository();
+      ensureProjectHasSeedSprite(repository, workerRequest.projectId);
+      const contractText = repository.getProjectContractText(workerRequest.projectId, workerRequest.scope ?? "all");
       logger.debug("Return project contract text.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
-        scope: message.scope ?? "all",
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
+        scope: workerRequest.scope ?? "all",
       });
 
-      postMessageToMain({
-        type: "RESPONSE",
-        requestId: message.requestId,
-        ok: true,
-        data: contractText,
-      });
+      postWorkerSuccessResponse(workerRequest.requestId, contractText);
       return;
     }
     case "DELETE_PROJECT_DATA": {
-      const repository = await getWorkerRepository();
-      repository.deleteProjectData(message.projectId);
+      const repository = await getInitializedWorkerRepository();
+      repository.deleteProjectData(workerRequest.projectId);
       logger.info("Delete project data.", {
-        requestId: message.requestId,
-        projectId: message.projectId,
+        requestId: workerRequest.requestId,
+        projectId: workerRequest.projectId,
       });
 
-      emitTableUpdated("sprites");
-      emitTableUpdated("variables");
-      emitTableUpdated("simulation_snapshots");
-
-      postMessageToMain({ type: "RESPONSE", requestId: message.requestId, ok: true, data: null });
+      emitSubscribedTableUpdates(["sprites", "variables", "simulation_snapshots"]);
+      postWorkerSuccessResponse(workerRequest.requestId, null);
       return;
     }
     case "SUBSCRIBE_TABLE": {
       // Subscriptions are table-scoped to keep cross-thread chatter minimal.
-      subscribedTables.add(message.table);
+      subscribedTablesByName.add(workerRequest.table);
       logger.debug("Subscribe table events.", {
-        table: message.table,
-        subscribedCount: subscribedTables.size,
+        table: workerRequest.table,
+        subscribedCount: subscribedTablesByName.size,
       });
       return;
     }
     case "UNSUBSCRIBE_TABLE": {
-      subscribedTables.delete(message.table);
+      subscribedTablesByName.delete(workerRequest.table);
       logger.debug("Unsubscribe table events.", {
-        table: message.table,
-        subscribedCount: subscribedTables.size,
+        table: workerRequest.table,
+        subscribedCount: subscribedTablesByName.size,
       });
       return;
     }
     default: {
-      const exhaustiveCheck: never = message;
+      const exhaustiveCheck: never = workerRequest;
       throw new Error(`Unsupported message: ${JSON.stringify(exhaustiveCheck)}`);
     }
   }
 }
 
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
-  const message = event.data;
+  const workerRequest = event.data;
 
-  void handleRequest(message).catch((error: unknown) => {
+  void handleWorkerRequest(workerRequest).catch((error: unknown) => {
     logger.error("Worker request failed.", {
-      requestType: message.type,
-      requestId: "requestId" in message ? message.requestId : null,
+      requestType: workerRequest.type,
+      requestId: "requestId" in workerRequest ? workerRequest.requestId : null,
       error: error instanceof Error ? error.message : "Unknown worker error",
     });
 
-    if ("requestId" in message) {
-      postMessageToMain({
+    if ("requestId" in workerRequest) {
+      postWorkerResponse({
         type: "RESPONSE",
-        requestId: message.requestId,
+        requestId: workerRequest.requestId,
         ok: false,
         error: error instanceof Error ? error.message : "Unknown worker error",
       });

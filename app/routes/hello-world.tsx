@@ -1,4 +1,4 @@
-import { ParticlePage } from "~/features/3d/particle-page";
+import { ParticlePage } from "~/features/3d/hello-world/particle-page";
 
 /**
  * Render the secondary hello-world route.
