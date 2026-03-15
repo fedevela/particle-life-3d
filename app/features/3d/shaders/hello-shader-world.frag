@@ -1,3 +1,4 @@
+// @requirement HSW-104 [a6f6e300-3058-466d-869f-390457639f99]
 uniform vec3 uColorA;
 
 void main() {

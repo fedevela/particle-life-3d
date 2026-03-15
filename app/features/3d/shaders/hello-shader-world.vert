@@ -1,3 +1,4 @@
+// @requirement HSW-103 [598e09f4-18f1-4322-8356-9a25b6a3b754]
 uniform sampler2D uState;
 
 attribute vec2 aReference;
