@@ -10,6 +10,7 @@ import {
   SHADER_PARTICLE_CAPACITY,
   SHADER_TEXTURE_SIZE,
 } from "~/features/3d/hello-shader-world-simulation";
+import { type HelloShaderWorldUniforms } from "~/features/3d/hello-shader-world-contract";
 import { createLogger } from "~/lib/logger";
 import { useUiStore } from "~/state/ui-store";
 
@@ -69,7 +70,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
   const referenceAttribute = useMemo(() => createReferenceAttribute(), []);
   const activeAttribute = useMemo(() => createActiveAttribute(), []);
 
-  const uniforms = useMemo(
+  const uniforms = useMemo<HelloShaderWorldUniforms>(
     () => ({
       uState: { value: null as THREE.Texture | null },
       uColorA: { value: new THREE.Color("#22d3ee") },

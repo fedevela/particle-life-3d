@@ -1,3 +1,29 @@
+import type * as THREE from "three";
+
+/** @requirement HSW-103, HSW-104 */
+export interface HelloShaderWorldUniforms {
+  uState: { value: THREE.Texture | null };
+  uColorA: { value: THREE.Color };
+}
+
+/** @requirement HSW-103 */
+export interface HelloShaderWorldAttributes {
+  position: THREE.BufferAttribute;
+  aReference: THREE.BufferAttribute;
+  aActive: THREE.BufferAttribute;
+}
+
+/** @requirement HSW-103 */
+export interface HelloShaderWorldComputeUniforms {
+  uFrame: { value: number };
+  uSeed: { value: number };
+  uAcceleration: { value: number };
+  uDirectionJitter: { value: number };
+  uMagnitudeJitter: { value: number };
+  uDamping: { value: number };
+  uMaxSpeed: { value: number };
+}
+
 /** Define one GPU readback snapshot used to generate text contracts for tests. */
 export type ShaderStateSnapshot = {
   frame: number;

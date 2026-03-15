@@ -2,7 +2,10 @@ import { GPUComputationRenderer, type Variable } from "three/examples/jsm/misc/G
 import * as THREE from "three";
 
 import computeShader from "~/features/3d/shaders/hello-shader-world.compute.frag";
-import { getShaderContractText } from "~/features/3d/hello-shader-world-contract";
+import {
+  getShaderContractText,
+  type HelloShaderWorldComputeUniforms,
+} from "~/features/3d/hello-shader-world-contract";
 import { createLogger } from "~/lib/logger";
 import {
   clampHelloShaderWorldMovementParams,
@@ -78,13 +81,15 @@ export class HelloShaderWorldSimulation {
 
     const stateVariable = this.gpuCompute.addVariable("textureState", computeShader, initialTexture);
     this.gpuCompute.setVariableDependencies(stateVariable, [stateVariable]);
-    stateVariable.material.uniforms.uFrame = { value: 0 };
-    stateVariable.material.uniforms.uSeed = { value: this.seedValue };
-    stateVariable.material.uniforms.uAcceleration = { value: this.movementParams.acceleration };
-    stateVariable.material.uniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
-    stateVariable.material.uniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
-    stateVariable.material.uniforms.uDamping = { value: this.movementParams.damping };
-    stateVariable.material.uniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
+
+    const computeUniforms = stateVariable.material.uniforms as unknown as HelloShaderWorldComputeUniforms;
+    computeUniforms.uFrame = { value: 0 };
+    computeUniforms.uSeed = { value: this.seedValue };
+    computeUniforms.uAcceleration = { value: this.movementParams.acceleration };
+    computeUniforms.uDirectionJitter = { value: this.movementParams.directionJitter };
+    computeUniforms.uMagnitudeJitter = { value: this.movementParams.magnitudeJitter };
+    computeUniforms.uDamping = { value: this.movementParams.damping };
+    computeUniforms.uMaxSpeed = { value: this.movementParams.maxSpeed };
     this.stateVariable = stateVariable;
 
     const capabilities = this.renderer.capabilities as THREE.WebGLRenderer["capabilities"] & {
@@ -234,13 +239,14 @@ export class HelloShaderWorldSimulation {
 
   /** Execute one GPU computation pass configured for the provided frame number. */
   private computeFrame(frame: number) {
-    this.stateVariable.material.uniforms.uFrame.value = frame;
-    this.stateVariable.material.uniforms.uSeed.value = this.seedValue;
-    this.stateVariable.material.uniforms.uAcceleration.value = this.movementParams.acceleration;
-    this.stateVariable.material.uniforms.uDirectionJitter.value = this.movementParams.directionJitter;
-    this.stateVariable.material.uniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
-    this.stateVariable.material.uniforms.uDamping.value = this.movementParams.damping;
-    this.stateVariable.material.uniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
+    const computeUniforms = this.stateVariable.material.uniforms as unknown as HelloShaderWorldComputeUniforms;
+    computeUniforms.uFrame.value = frame;
+    computeUniforms.uSeed.value = this.seedValue;
+    computeUniforms.uAcceleration.value = this.movementParams.acceleration;
+    computeUniforms.uDirectionJitter.value = this.movementParams.directionJitter;
+    computeUniforms.uMagnitudeJitter.value = this.movementParams.magnitudeJitter;
+    computeUniforms.uDamping.value = this.movementParams.damping;
+    computeUniforms.uMaxSpeed.value = this.movementParams.maxSpeed;
     this.gpuCompute.compute();
   }
 
