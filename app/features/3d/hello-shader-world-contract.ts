@@ -74,6 +74,8 @@ function readStateTuple(values: Float32Array, index: number) {
  * Return deterministic text for one shader simulation snapshot.
  *
  * This is intentionally plain text so Playwright can compare it to fixtures directly.
+ *
+ * @requirement HSW-105
  */
 export function getShaderContractText(snapshot: ShaderStateSnapshot) {
   const particleCount = snapshot.textureSize * snapshot.textureSize;

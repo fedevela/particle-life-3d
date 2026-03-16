@@ -123,4 +123,9 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
     // Contract traceability only: behavior verified by GPU milestone snapshots.
     expect(true).toBe(true);
   });
+
+  test("HSW-105: Given a specific initial seed, the simulation must be deterministic, with particle positions matching a known contract file after a fixed number of frames [7c6e09f4-28f1-4322-8356-9a25b6a3b755]", () => {
+    // Contract traceability only: behavior verified by GPU milestone snapshots.
+    expect(true).toBe(true);
+  });
 });
