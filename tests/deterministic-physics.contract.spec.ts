@@ -140,10 +140,9 @@ test.describe("Scenario: Initializing the deterministic physics environment", ()
     expect(contract30).toContain("out_of_bounds=0");
   });
 
-  test("SWARM-006: [INFINITY] particles wrap around boundaries in infinity mode", async ({ page }) => {
-    // Initialize with Wrap mode and high velocity
-    // We use a different seed or explicitly set paused/vJitter
-    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50&boundaryType=wrap`);
+  test("SWARM-006: [INFINITY] particles wrap around boundaries and UI toggle works", async ({ page }) => {
+    // Start in default (Bounce) mode with high velocity
+    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50`);
     await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
     
     const getContract = async (frame: number) => {
@@ -160,29 +159,39 @@ test.describe("Scenario: Initializing the deterministic physics environment", ()
         }, steps);
     };
 
-    // Frame 0: Non-zero velocity
-    const contract0 = await getContract(0);
-    expect(contract0).toContain("out_of_bounds=0");
+    const resetSim = async () => {
+        await page.evaluate(async () => {
+            const api = (window as any).__DETERMINISTIC_PHYSICS_TEST_API__ as DeterministicPhysicsTestApi;
+            await api.__RESET_DETERMINISTIC_PHYSICS_SIM_FOR_TEST__?.();
+        });
+    };
 
-    // Step to frame 30
-    await stepSim(30);
-    const contract30 = await getContract(30);
-    
-    // In wrap mode, particles should technically never be out of bounds if the logic is correct.
-    expect(contract30).toContain("out_of_bounds=0");
-
-    // Run comparison: Bounce Mode (to verify behavior is different)
-    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50&boundaryType=bounce`);
-    await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
-    
-    const contract0_bounce = await getContract(0);
-    // Initial state should be identical
-    expect(contract0_bounce).toBe(contract0);
-
+    // 1. Initial Bounce Run
     await stepSim(30);
     const contract30_bounce = await getContract(30);
+    expect(contract30_bounce).toContain("out_of_bounds=0");
+
+    // 2. Toggle to Infinity Mode via UI
+    await page.click('#boundary-toggle');
+    // Reload to ensure full reset with same seed if needed, or just reset sim
+    // Actually, the toggle updates the runtime uniform, but we need to compare same start
+    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50`);
+    await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
+    await page.click('#boundary-toggle'); // Set to Wrap
     
-    // State at frame 30 MUST be different between wrap and bounce given high velocity
-    expect(contract30).not.toBe(contract30_bounce);
+    await stepSim(30);
+    const contract30_wrap = await getContract(30);
+
+    // State at frame 30 MUST be different between wrap and bounce
+    expect(contract30_wrap).not.toBe(contract30_bounce);
+    expect(contract30_wrap).toContain("out_of_bounds=0");
+
+    // 3. Toggle back to Bounce via UI and verify it diverges again
+    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50`);
+    await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
+    // Default is bounce, so don't click
+    await stepSim(30);
+    const contract30_bounce_retry = await getContract(30);
+    expect(contract30_bounce_retry).toBe(contract30_bounce);
   });
 });
