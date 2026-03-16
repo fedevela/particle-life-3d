@@ -1,5 +1,5 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles } from "lucide-react";
+import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles, Activity } from "lucide-react";
 import { useRef, type WheelEvent } from "react";
 import { NavLink, Outlet } from "react-router";
 
@@ -216,6 +216,22 @@ export default function DashboardShell() {
                   </div>
                 </div>
               ) : null}
+            </div>
+            <div className="mt-2">
+              <NavLink
+                to="/swarm-walk"
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                    isActive
+                      ? "bg-cyan-400/20 text-cyan-100"
+                      : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+                  )
+                }
+              >
+                <Activity size={16} className="shrink-0" />
+                <span className={cn(!isExpanded && "sr-only")}>Swarm-Walk</span>
+              </NavLink>
             </div>
           </nav>
         </aside>
