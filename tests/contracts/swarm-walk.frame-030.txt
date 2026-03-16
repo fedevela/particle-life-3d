@@ -1,6 +1,6 @@
 [swarm-walk]
 frame=30
-entity_count=1024
+peer_count=1024
 avg_x=0.00
 avg_y=-0.12
 avg_z=0.08
