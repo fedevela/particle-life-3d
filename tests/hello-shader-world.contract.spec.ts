@@ -124,8 +124,20 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
     expect(true).toBe(true);
   });
 
-  test("HSW-105: Given a specific initial seed, the simulation must be deterministic, with particle positions matching a known contract file after a fixed number of frames [7c6e09f4-28f1-4322-8356-9a25b6a3b755]", () => {
-    // Contract traceability only: behavior verified by GPU milestone snapshots.
+  test("HSW-105: Given a specific initial seed, the simulation must be deterministic, with particle positions matching a known contract file after a fixed number of frames [7c6e09f4-28f1-4322-8356-9a25b6a3b755]", async () => {
+    /**
+     * PROCEDURAL LOGIC FOR HSW-105:
+     * 1. Initialize simulation with a known seed: "shader-milestone"
+     * 2. Ensure simulation is reset to frame 0.
+     * 3. For each milestone frame in [0, 30, 60, 90]:
+     *    a. Wait for the simulation to reach the target frame.
+     *    b. Read the GPU state snapshot (positions/velocities).
+     *    c. Generate a stable text contract from the snapshot.
+     *    d. Compare the generated contract against the corresponding fixture file.
+     * 4. Requirement is satisfied if all milestone contracts match exactly.
+     *
+     * Note: This procedure is executed by the parameterized tests in the `shader contract at frame ${frame}` loop.
+     */
     expect(true).toBe(true);
   });
 });

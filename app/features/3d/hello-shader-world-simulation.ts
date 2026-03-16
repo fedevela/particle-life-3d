@@ -250,6 +250,16 @@ export class HelloShaderWorldSimulation {
     this.gpuCompute.compute();
   }
 
+  /**
+   * PROCEDURAL LOGIC FOR HSW-105 (Determinism):
+   * 1. Transform the input string seed into a stable numeric value (32-bit uint).
+   * 2. Initialize the internal RNG state using this numeric seed.
+   * 3. Employ a Xorshift (or similar) deterministic RNG algorithm to ensure 
+   *    identical number sequences across any execution environment.
+   * 4. Map the numeric seed to a 0.0-1.0 float range for GPU uniform consumption.
+   * 5. Ensure all simulation parameters (acceleration, jitter, etc.) are 
+   *    clamped to stable ranges before execution.
+   */
   private hashSeed(seed: string) {
     let hash = 2166136261;
     for (let index = 0; index < seed.length; index += 1) {
