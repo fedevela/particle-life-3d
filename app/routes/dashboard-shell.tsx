@@ -38,6 +38,36 @@ function getMovementInputValue(key: HelloShaderWorldMovementParamKey, value: num
   return value.toFixed(decimals);
 }
 
+interface SidebarNavLinkProps {
+  to: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  isExpanded: boolean;
+  end?: boolean;
+  onClick?: () => void;
+}
+
+function SidebarNavLink({ to, icon: Icon, label, isExpanded, end, onClick }: SidebarNavLinkProps) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      onClick={onClick}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+          isActive
+            ? "bg-cyan-400/20 text-cyan-100"
+            : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+        )
+      }
+    >
+      <Icon size={16} className="shrink-0" />
+      <span className={cn(!isExpanded && "sr-only")}>{label}</span>
+    </NavLink>
+  );
+}
+
 /**
  * Render the dashboard layout route with navigation and an outlet region.
  *
@@ -110,21 +140,13 @@ export default function DashboardShell() {
           </div>
 
           <nav className="px-3 py-4">
-            <NavLink
+            <SidebarNavLink
               to="/"
               end
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  isActive
-                    ? "bg-cyan-400/20 text-cyan-100"
-                    : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
-                )
-              }
-            >
-              <Sparkles size={16} className="shrink-0" />
-              <span className={cn(!isExpanded && "sr-only")}>Hello World</span>
-            </NavLink>
+              icon={Sparkles}
+              label="Hello World"
+              isExpanded={isExpanded}
+            />
             <div className="mt-2">
               <NavLink
                 to="/hello-shader-world"
@@ -218,20 +240,12 @@ export default function DashboardShell() {
               ) : null}
             </div>
             <div className="mt-2">
-              <NavLink
+              <SidebarNavLink
                 to="/swarm-walk"
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                    isActive
-                      ? "bg-cyan-400/20 text-cyan-100"
-                      : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
-                  )
-                }
-              >
-                <Activity size={16} className="shrink-0" />
-                <span className={cn(!isExpanded && "sr-only")}>Swarm-Walk</span>
-              </NavLink>
+                icon={Activity}
+                label="Swarm-Walk"
+                isExpanded={isExpanded}
+              />
             </div>
           </nav>
         </aside>
