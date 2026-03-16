@@ -1,0 +1,3 @@
+# SWARM-001: Swarm-Walk Initial Contract
+# Placeholder for simulation state verification.
+initial_state: {}

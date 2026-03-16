@@ -7,6 +7,8 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
+    "test": "playwright test tests/*.contract.spec.ts",
+    "tests:e2e": "playwright test tests/*.ui.spec.ts",
     "test:e2e": "playwright test --max-failures=1",
     "test:e2e:hello-world": "playwright test tests/hello-world*.spec.ts --max-failures=1 --reporter=list",
     "test:e2e:hello-shader-world": "playwright test tests/hello-shader-world*.spec.ts --max-failures=1 --reporter=list"
