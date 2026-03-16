@@ -49,6 +49,12 @@ type UiState = {
   helloShaderWorldMovementParams: HelloShaderWorldMovementParams;
   setHelloShaderWorldMovementParam: (key: HelloShaderWorldMovementParamKey, rawValue: string) => void;
   setHelloShaderWorldMovementParams: (nextParams: HelloShaderWorldMovementParams) => void;
+  
+  // Swarm-Walk / Physics State
+  isSwarmWalkSubmenuOpen: boolean;
+  toggleSwarmWalkSubmenu: () => void;
+  swarmWalkBoundaryType: 'bounce' | 'wrap';
+  setSwarmWalkBoundaryType: (type: 'bounce' | 'wrap') => void;
 };
 
 /**
@@ -94,4 +100,10 @@ export const useUiStore = create<UiState>((set) => ({
     set({
       helloShaderWorldMovementParams: clampHelloShaderWorldMovementParams(nextParams),
     }),
+
+  // Swarm-Walk Defaults
+  isSwarmWalkSubmenuOpen: false,
+  toggleSwarmWalkSubmenu: () => set((state) => ({ isSwarmWalkSubmenuOpen: !state.isSwarmWalkSubmenuOpen })),
+  swarmWalkBoundaryType: 'bounce',
+  setSwarmWalkBoundaryType: (type) => set({ swarmWalkBoundaryType: type }),
 }));

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import * as THREE from "three";
 import { DeterministicPhysicsSimulation, createDeterministicPhysicsTestApi } from "~/features/3d/deterministic-physics-simulation";
 import { createLogger } from "~/lib/logger";
+import { useUiStore } from "~/state/ui-store";
 
 const logger = createLogger("deterministic-physics-page");
 
@@ -20,10 +21,18 @@ export default function DeterministicPhysicsPage() {
   const simulationRef = useRef<DeterministicPhysicsSimulation | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
-  // UI State
-  const [boundaryType, setBoundaryType] = useState<'bounce' | 'wrap'>(
-    (searchParams.get("boundaryType") as 'bounce' | 'wrap') || 'bounce'
-  );
+  // Consume boundary state from UI store (set via Sidebar)
+  const swarmWalkBoundaryType = useUiStore((state) => state.swarmWalkBoundaryType);
+  const setSwarmWalkBoundaryType = useUiStore((state) => state.setSwarmWalkBoundaryType);
+
+  // Initialize store from URL if present (one-time sync on mount/seed change if needed, 
+  // but typically URL overrides store, or store persists. Let's respect URL if provided for testing.)
+  useEffect(() => {
+    const urlBoundary = searchParams.get("boundaryType") as 'bounce' | 'wrap';
+    if (urlBoundary) {
+        setSwarmWalkBoundaryType(urlBoundary);
+    }
+  }, [searchParams, setSwarmWalkBoundaryType]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -44,7 +53,7 @@ export default function DeterministicPhysicsPage() {
         boundsMax: (searchParams.get("boundsMax") || "10,10,10").split(",").map(Number) as [number, number, number],
         deltaTime: parseFloat(searchParams.get("deltaTime") || (1 / 60).toString()),
         initialVelocityJitter: parseFloat(searchParams.get("vJitter") || "0"),
-        boundaryType: boundaryType, // Use state for initial value
+        boundaryType: swarmWalkBoundaryType, // Use store value
     };
 
     const simulation = new DeterministicPhysicsSimulation(renderer, seed, params);
@@ -75,12 +84,12 @@ export default function DeterministicPhysicsPage() {
     };
   }, [seed]); // Re-run if seed changes (full reset)
 
-  // Effect to handle runtime updates to boundary type
+  // Effect to handle runtime updates to boundary type from Store
   useEffect(() => {
     if (simulationRef.current) {
-        simulationRef.current.setBoundaryType(boundaryType);
+        simulationRef.current.setBoundaryType(swarmWalkBoundaryType);
     }
-  }, [boundaryType]);
+  }, [swarmWalkBoundaryType]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-900">
@@ -100,35 +109,6 @@ export default function DeterministicPhysicsPage() {
       </div>
       <div className="flex-1 relative overflow-hidden flex items-center justify-center">
         <canvas ref={canvasRef} className="w-full h-full" />
-        
-        {/* Controls Overlay */}
-        <div className="absolute top-8 left-8 bg-slate-800/90 border border-slate-700 p-4 rounded shadow-xl backdrop-blur text-slate-200 w-64">
-            <h2 className="font-mono text-xs uppercase text-slate-500 mb-4 border-b border-slate-700 pb-2">Environment Controls</h2>
-            
-            <div className="flex items-center justify-between mb-2">
-                <label htmlFor="boundary-toggle" className="text-sm font-medium">Infinity Mode</label>
-                <button
-                    id="boundary-toggle"
-                    onClick={() => setBoundaryType(boundaryType === 'bounce' ? 'wrap' : 'bounce')}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-900 ${
-                        boundaryType === 'wrap' ? 'bg-indigo-600' : 'bg-slate-600'
-                    }`}
-                >
-                    <span className="sr-only">Toggle Infinity Mode</span>
-                    <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            boundaryType === 'wrap' ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                    />
-                </button>
-            </div>
-            <p className="text-xs text-slate-400 mt-2">
-                {boundaryType === 'bounce' 
-                    ? "Particles reflect off the volume boundaries (Box)." 
-                    : "Particles wrap around edges (Toroidal)."}
-            </p>
-        </div>
-
         <div className="absolute bottom-8 left-8 text-slate-500 font-mono text-xs pointer-events-none">
             [ARCHITECTURE_READY_FOR_MALKHUT]
         </div>

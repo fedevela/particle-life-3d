@@ -85,6 +85,12 @@ export default function DashboardShell() {
   const setHelloShaderWorldMovementParam = useUiStore((state) => state.setHelloShaderWorldMovementParam);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Swarm-Walk State
+  const isSwarmWalkSubmenuOpen = useUiStore((state) => state.isSwarmWalkSubmenuOpen);
+  const toggleSwarmWalkSubmenu = useUiStore((state) => state.toggleSwarmWalkSubmenu);
+  const swarmWalkBoundaryType = useUiStore((state) => state.swarmWalkBoundaryType);
+  const setSwarmWalkBoundaryType = useUiStore((state) => state.setSwarmWalkBoundaryType);
+
   function queueAction(type: "add" | "remove") {
     const rawAmount = amountInputRef.current?.value ?? helloShaderWorldAmountInput;
     queueHelloShaderWorldAction(type, rawAmount);
@@ -239,13 +245,69 @@ export default function DashboardShell() {
                 </div>
               ) : null}
             </div>
+            
+            {/* Swarm-Walk Menu with Toggle */}
             <div className="mt-2">
-              <SidebarNavLink
-                to="/swarm-walk"
-                icon={Activity}
-                label="Swarm-Walk"
-                isExpanded={isExpanded}
-              />
+              <div className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  // We need to detect if active manually or use NavLink for the text part only
+                  // Using a wrapper div to hold both Link and Toggle
+                  "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100"
+              )}>
+                  <NavLink
+                    to="/swarm-walk"
+                    className={({ isActive }) => cn("flex-1 flex items-center gap-3", isActive && "text-cyan-100")}
+                  >
+                    <Activity size={16} className="shrink-0" />
+                    <span className={cn("flex-1", !isExpanded && "sr-only")}>Swarm-Walk</span>
+                  </NavLink>
+                  
+                  <button
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSwarmWalkSubmenu();
+                    }}
+                    className="p-1 hover:bg-slate-600 rounded"
+                    aria-label="Toggle Swarm-Walk submenu"
+                  >
+                    <ChevronDown
+                      size={14}
+                      className={cn(
+                        "shrink-0 transition-transform duration-200",
+                        !isExpanded && "sr-only",
+                        isSwarmWalkSubmenuOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+              </div>
+
+              {isExpanded && isSwarmWalkSubmenuOpen ? (
+                <div className="mt-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="boundary-toggle" className="text-xs uppercase tracking-[0.14em] text-cyan-200">
+                        Infinity Mode
+                    </label>
+                    <button
+                        id="boundary-toggle"
+                        onClick={() => setSwarmWalkBoundaryType(swarmWalkBoundaryType === 'bounce' ? 'wrap' : 'bounce')}
+                        className={cn(
+                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 focus:ring-offset-slate-900",
+                            swarmWalkBoundaryType === 'wrap' ? 'bg-cyan-600' : 'bg-slate-600'
+                        )}
+                        title="Toggle between Bounce (Box) and Wrap (Infinity) boundary modes"
+                    >
+                        <span className="sr-only">Toggle Infinity Mode</span>
+                        <span
+                            className={cn(
+                                "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
+                                swarmWalkBoundaryType === 'wrap' ? 'translate-x-5' : 'translate-x-1'
+                            )}
+                        />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </nav>
         </aside>
