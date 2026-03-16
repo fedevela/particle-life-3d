@@ -86,6 +86,14 @@ export class DeterministicPhysicsSimulation extends BaseDeterministicGpuSimulati
     variable.material.uniforms.uFriction = { value: this.params.friction };
     variable.material.uniforms.uBoundsMin = { value: new THREE.Vector3(...this.params.boundsMin) };
     variable.material.uniforms.uBoundsMax = { value: new THREE.Vector3(...this.params.boundsMax) };
+    variable.material.uniforms.uBoundaryType = { value: this.params.boundaryType === 'wrap' ? 1 : 0 };
+  }
+
+  public setBoundaryType(type: 'bounce' | 'wrap') {
+    this.params.boundaryType = type;
+    const value = type === 'wrap' ? 1 : 0;
+    this.positionVariable.material.uniforms.uBoundaryType.value = value;
+    this.velocityVariable.material.uniforms.uBoundaryType.value = value;
   }
 
   /** [SWARM-002, SWARM-003, SWARM-006] Advance simulation by one step */

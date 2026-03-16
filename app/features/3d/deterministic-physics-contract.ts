@@ -25,6 +25,7 @@ export interface DeterministicPhysicsParams {
   boundsMax: [number, number, number];
   deltaTime: number;
   initialVelocityJitter?: number;
+  boundaryType: 'bounce' | 'wrap';
 }
 
 export const DEFAULT_DETERMINISTIC_PHYSICS_PARAMS: DeterministicPhysicsParams = {
@@ -33,6 +34,7 @@ export const DEFAULT_DETERMINISTIC_PHYSICS_PARAMS: DeterministicPhysicsParams = 
   boundsMax: [10, 10, 10],
   deltaTime: 1 / 60,
   initialVelocityJitter: 0,
+  boundaryType: 'bounce',
 };
 
 /** Define the state snapshot for the Deterministic Physics Baseline. */

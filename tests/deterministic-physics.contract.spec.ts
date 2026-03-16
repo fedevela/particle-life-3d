@@ -139,4 +139,50 @@ test.describe("Scenario: Initializing the deterministic physics environment", ()
     // Check boundaries: even with high jitter, out_of_bounds should be 0
     expect(contract30).toContain("out_of_bounds=0");
   });
+
+  test("SWARM-006: [INFINITY] particles wrap around boundaries in infinity mode", async ({ page }) => {
+    // Initialize with Wrap mode and high velocity
+    // We use a different seed or explicitly set paused/vJitter
+    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50&boundaryType=wrap`);
+    await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
+    
+    const getContract = async (frame: number) => {
+        return await page.evaluate(async (f) => {
+            const api = (window as any).__DETERMINISTIC_PHYSICS_TEST_API__ as DeterministicPhysicsTestApi;
+            return await api.__GET_DETERMINISTIC_PHYSICS_CONTRACT_TEXT__?.(f);
+        }, frame);
+    };
+
+    const stepSim = async (steps: number) => {
+        await page.evaluate(async (s) => {
+            const api = (window as any).__DETERMINISTIC_PHYSICS_TEST_API__ as DeterministicPhysicsTestApi;
+            await api.__STEP_DETERMINISTIC_PHYSICS_SIM__?.(s);
+        }, steps);
+    };
+
+    // Frame 0: Non-zero velocity
+    const contract0 = await getContract(0);
+    expect(contract0).toContain("out_of_bounds=0");
+
+    // Step to frame 30
+    await stepSim(30);
+    const contract30 = await getContract(30);
+    
+    // In wrap mode, particles should technically never be out of bounds if the logic is correct.
+    expect(contract30).toContain("out_of_bounds=0");
+
+    // Run comparison: Bounce Mode (to verify behavior is different)
+    await page.goto(`/deterministic-physics?seed=${TEST_SEED}&paused=true&vJitter=50&boundaryType=bounce`);
+    await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
+    
+    const contract0_bounce = await getContract(0);
+    // Initial state should be identical
+    expect(contract0_bounce).toBe(contract0);
+
+    await stepSim(30);
+    const contract30_bounce = await getContract(30);
+    
+    // State at frame 30 MUST be different between wrap and bounce given high velocity
+    expect(contract30).not.toBe(contract30_bounce);
+  });
 });
