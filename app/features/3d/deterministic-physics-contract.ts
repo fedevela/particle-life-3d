@@ -57,6 +57,8 @@ export interface DeterministicPhysicsTestApi {
   __GET_PHYSICS_BASELINE_CONTRACT_TEXT__?: (frame?: number) => Promise<string>;
   /** Verification Obligation: RESET_PHYSICS_BASELINE_SIM_FOR_TEST (Requirement Traceability) */
   __RESET_PHYSICS_BASELINE_SIM_FOR_TEST__?: () => Promise<void>;
+  /** Verification Obligation: STEP_PHYSICS_BASELINE_SIM (Requirement Traceability) */
+  __STEP_PHYSICS_BASELINE_SIM__?: (steps?: number) => Promise<void>;
 }
 
 /** 

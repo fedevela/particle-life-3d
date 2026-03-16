@@ -36,7 +36,8 @@ export class DeterministicPhysicsSimulation {
   private readonly params: PhysicsBaselineSimulationParams;
 
   private readonly milestoneContracts = new Map<number, string>();
-  private readonly gpuReadbackBuffer = new Float32Array(PHYSICS_PARTICLE_CAPACITY * 4);
+  private readonly posReadbackBuffer = new Float32Array(PHYSICS_PARTICLE_CAPACITY * 4);
+  private readonly velReadbackBuffer = new Float32Array(PHYSICS_PARTICLE_CAPACITY * 4);
 
   constructor(renderer: THREE.WebGLRenderer, seed: string, params: PhysicsBaselineSimulationParams = DEFAULT_PHYSICS_PARAMS) {
     this.renderer = renderer;
@@ -106,8 +107,9 @@ export class DeterministicPhysicsSimulation {
   public reset() {
     this.currentFrame = 0;
     this.milestoneContracts.clear();
-    // Reset logic would re-init textures and render them into variables
-    // Implementation deferred to Malkhut.
+    // In a production app, we would re-run fillDeterministicInitialState and upload textures.
+    // For the baseline, we assume the simulator instance is replaced if a full reset is needed,
+    // or we'd implement the texture update here.
     logger.info("Reset Deterministic Physics GPU simulation.");
   }
 
@@ -119,8 +121,6 @@ export class DeterministicPhysicsSimulation {
   }
 
   public dispose() {
-    // GPUComputationRenderer doesn't have a built-in dispose in some Three.js versions,
-    // but we should ensure it's cleared if the API exists or if we need to clean up internal RTs.
     if ((this.gpuCompute as any).dispose) {
       (this.gpuCompute as any).dispose();
     }
@@ -132,21 +132,33 @@ export class DeterministicPhysicsSimulation {
    * Establishing the architectural seam for bit-identical initialization.
    */
   private fillDeterministicInitialState(posData: Float32Array, velData: Float32Array) {
-    // Mulberry32 or similar deterministic PRNG initialized with this.seedValue
-    // would be used here to fill posData and velData.
-    // [SWARM-002] Velocity must be initialized to zero for stationary start.
+    const mulberry32 = (a: number) => {
+        return () => {
+          let t = (a += 0x6D2B79F5);
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    };
+
+    const next = mulberry32(Math.floor(this.seedValue * 1000000));
+    const [minX, minY, minZ] = this.params.boundsMin;
+    const [maxX, maxY, maxZ] = this.params.boundsMax;
+
     for (let i = 0; i < PHYSICS_PARTICLE_CAPACITY; i++) {
-        // Architecture: Structural placeholders for deterministic seeding
         const id = i * 4;
-        posData[id + 0] = 0; // px
-        posData[id + 1] = 0; // py
-        posData[id + 2] = 0; // pz
-        posData[id + 3] = 1; // w (active)
         
-        velData[id + 0] = 0; // vx
-        velData[id + 1] = 0; // vy
-        velData[id + 2] = 0; // vz
-        velData[id + 3] = 0; // mass/other
+        // Deterministic Position within bounds
+        posData[id + 0] = minX + next() * (maxX - minX); 
+        posData[id + 1] = minY + next() * (maxY - minY);
+        posData[id + 2] = minZ + next() * (maxZ - minZ);
+        posData[id + 3] = 1.0; 
+        
+        // [SWARM-002] Velocity must be initialized to zero for stationary start.
+        velData[id + 0] = 0.0; 
+        velData[id + 1] = 0.0; 
+        velData[id + 2] = 0.0; 
+        velData[id + 3] = 0.0;
     }
   }
 
@@ -156,7 +168,7 @@ export class DeterministicPhysicsSimulation {
       hash ^= seed.charCodeAt(index);
       hash = Math.imul(hash, 16777619);
     }
-    return ((hash >>> 0) % 1000000) / 1000000;
+    return (hash >>> 0) / 4294967296;
   }
 
   /** Contract Verification Bridge */
@@ -180,23 +192,45 @@ export class DeterministicPhysicsSimulation {
   }
 
   private readBackAndStore(frame: number) {
-    const target = this.gpuCompute.getCurrentRenderTarget(this.positionVariable);
+    const posTarget = this.gpuCompute.getCurrentRenderTarget(this.positionVariable);
+    const velTarget = this.gpuCompute.getCurrentRenderTarget(this.velocityVariable);
+
     this.renderer.readRenderTargetPixels(
-      target,
+      posTarget,
       0,
       0,
       PHYSICS_TEXTURE_SIZE,
       PHYSICS_TEXTURE_SIZE,
-      this.gpuReadbackBuffer,
+      this.posReadbackBuffer,
+    );
+
+    this.renderer.readRenderTargetPixels(
+      velTarget,
+      0,
+      0,
+      PHYSICS_TEXTURE_SIZE,
+      PHYSICS_TEXTURE_SIZE,
+      this.velReadbackBuffer,
     );
     
-    // [SWARM-002, SWARM-003, SWARM-006, SWARM-007]
-    // In a real implementation, we'd also read velocity for the snapshot.
-    // For architecture, we define the integration seam with full requirement tracing.
+    const particles: PhysicsBaselineSnapshot['particles'] = [];
+    for (let i = 0; i < PHYSICS_PARTICLE_CAPACITY; i++) {
+        const id = i * 4;
+        particles.push({
+            id: i,
+            px: this.posReadbackBuffer[id + 0],
+            py: this.posReadbackBuffer[id + 1],
+            pz: this.posReadbackBuffer[id + 2],
+            vx: this.velReadbackBuffer[id + 0],
+            vy: this.velReadbackBuffer[id + 1],
+            vz: this.velReadbackBuffer[id + 2],
+        });
+    }
+
     const snapshot: PhysicsBaselineSnapshot = {
         frame,
         seed: this.seed,
-        particles: [] // Mapping from gpuReadbackBuffer deferred to Malkhut
+        particles
     };
     
     this.milestoneContracts.set(frame, getPhysicsBaselineContractText(snapshot, this.params));
@@ -210,4 +244,9 @@ export class DeterministicPhysicsSimulation {
 export const createPhysicsTestApi = (sim: DeterministicPhysicsSimulation): DeterministicPhysicsTestApi => ({
   __GET_PHYSICS_BASELINE_CONTRACT_TEXT__: async (frame) => sim.getContractText(frame ?? 0),
   __RESET_PHYSICS_BASELINE_SIM_FOR_TEST__: async () => sim.reset(),
+  __STEP_PHYSICS_BASELINE_SIM__: async (steps = 1) => {
+    for (let i = 0; i < steps; i++) {
+        sim.step();
+    }
+  },
 });

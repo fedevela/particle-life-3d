@@ -43,7 +43,9 @@ export default function DeterministicPhysicsPage() {
     // 3. Render Loop (Skeleton)
     let animationFrameId: number;
     const animate = () => {
-      simulation.step();
+      if (searchParams.get("paused") !== "true") {
+        simulation.step();
+      }
       // Rendering logic (Scene/Camera) deferred to Malkhut.
       animationFrameId = requestAnimationFrame(animate);
     };
