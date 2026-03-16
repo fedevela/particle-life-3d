@@ -29,6 +29,11 @@ function resolvePageConfiguration() {
   };
 }
 
+/**
+ * Render the top-level page container for the deterministic shader simulation.
+ *
+ * @returns Returns the full-size canvas page section.
+ */
 export function HelloShaderWorldPage() {
   const { isTestMode, seed } = useMemo(() => resolvePageConfiguration(), []);
   const sessionSeedRef = useRef<string>(seed ?? crypto.randomUUID());

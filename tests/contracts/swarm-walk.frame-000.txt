@@ -1,0 +1,11 @@
+[swarm-walk]
+frame=0
+entity_count=1024
+avg_x=-0.10
+avg_y=0.08
+avg_z=-0.18
+max_radius=8.08
+checksum=cb923ab3d11839b356c862b995f7ce0c
+sample_0=-3.19,0.69,-3.13
+sample_1=1.80,3.71,3.14
+sample_2=-1.09,-2.63,-2.16

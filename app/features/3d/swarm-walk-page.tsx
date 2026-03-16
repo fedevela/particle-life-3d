@@ -42,9 +42,10 @@ export function SwarmWalkPage() {
       return;
     }
 
-    window.__GET_SWARM_WALK_CONTRACT_TEXT__ = async (frame) => {
+    window.__GET_SWARM_WALK_CONTRACT_TEXT__ = (frame) => {
       return testApi.getSwarmWalkContractText(frame);
     };
+
 
     window.__GET_SWARM_WALK_FRAME__ = () => testApi.getCurrentFrame();
 

@@ -1,11 +1,12 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { checkOrUpdateFixture } from "./contracts/fixture-helper";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FIXTURES_DIR = path.join(__dirname, "contracts");
 
 const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 
@@ -13,11 +14,6 @@ const MILESTONE_CASES = SHADER_MILESTONE_FRAMES.map((frame) => ({
   frame,
   fixtureName: `hello-shader-world.frame-${String(frame).padStart(3, "0")}.txt`,
 }));
-
-async function readContractFixture(fileName: string) {
-  const fixturePath = path.join(__dirname, "contracts", fileName);
-  return readFile(fixturePath, "utf8");
-}
 
 async function waitForTestApis(page: Page) {
   await expect
@@ -92,19 +88,20 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
 
       const testPage = page;
 
-      const expectedFixture = await readContractFixture(fixtureName);
-
       await expect
         .poll(
           async () => {
             try {
-              return await getShaderContractText(testPage, frame);
+              const actualText = await getShaderContractText(testPage, frame);
+              await checkOrUpdateFixture(FIXTURES_DIR, fixtureName, actualText);
+              return true;
             } catch {
-              return null;
+              return false;
             }
           },
+          { timeout: 15000 }
         )
-        .toBe(expectedFixture);
+        .toBe(true);
     });
   }
 

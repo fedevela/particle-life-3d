@@ -6,7 +6,7 @@ import {
   type CameraPersistenceTestApi,
 } from "~/features/3d/camera-persistence-controls";
 import type { SpriteEntity } from "~/db/types";
-import { useSprites } from "~/hooks/use-sprites";
+import { usePeers } from "~/hooks/use-peers";
 
 /** Define scene props used by runtime and test wiring. */
 type ParticleSceneProps = {
@@ -14,15 +14,15 @@ type ParticleSceneProps = {
   onCameraTestApiReady?: (api: CameraPersistenceTestApi | null) => void;
 };
 
-/** Create a reusable procedural sphere texture used by sprite materials. */
-function createSphereTexture() {
+/** Create a reusable procedural sphere texture used by peer materials. */
+function createPeerTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
 
   const context = canvas.getContext("2d");
   if (!context) {
-    throw new Error("Unable to create 2D canvas context for sphere texture.");
+    throw new Error("Unable to create 2D canvas context for peer texture.");
   }
 
   const gradient = context.createLinearGradient(0, 0, 128, 128);
@@ -42,12 +42,12 @@ function createSphereTexture() {
   return texture;
 }
 
-/** Render one sphere sprite mesh from a validated sprite entity. */
-function SphereMesh({ sprite, texture }: { sprite: SpriteEntity; texture: THREE.Texture }) {
-  const color = typeof sprite.metadata.color === "string" ? sprite.metadata.color : "#93c5fd";
+/** Render one sphere mesh for a validated peer entity. */
+function PeerSphere({ peer, texture }: { peer: SpriteEntity; texture: THREE.Texture }) {
+  const color = typeof peer.metadata.color === "string" ? peer.metadata.color : "#93c5fd";
 
   return (
-    <mesh position={sprite.position}>
+    <mesh position={peer.position}>
       <sphereGeometry args={[1, 40, 40]} />
       <meshStandardMaterial color={color} map={texture} metalness={0.15} roughness={0.45} />
     </mesh>
@@ -55,17 +55,17 @@ function SphereMesh({ sprite, texture }: { sprite: SpriteEntity; texture: THREE.
 }
 
 /**
- * Render scene lighting, helpers, sprites, and camera controls.
+ * Render scene lighting, helpers, peers, and camera controls.
  *
  * @returns Returns scene nodes mounted inside the Three.js canvas.
  */
 export function ParticleScene({ projectId, onCameraTestApiReady }: ParticleSceneProps) {
-  const sprites = useSprites(projectId);
-  const sphereTexture = useMemo(() => createSphereTexture(), []);
+  const peers = usePeers(projectId);
+  const peerTexture = useMemo(() => createPeerTexture(), []);
 
-  for (const sprite of sprites) {
-    if (sprite.type !== "sphere") {
-      throw new Error(`Unsupported sprite type '${sprite.type}' for sprite '${sprite.id}'.`);
+  for (const peer of peers) {
+    if (peer.type !== "sphere") {
+      throw new Error(`Unsupported peer type '${peer.type}' for peer '${peer.id}'.`);
     }
   }
 
@@ -75,8 +75,8 @@ export function ParticleScene({ projectId, onCameraTestApiReady }: ParticleScene
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 6, 3]} intensity={1.2} />
       <gridHelper args={[30, 30, "#1d4ed8", "#1e293b"]} />
-      {sprites.map((sprite, index) => (
-        <SphereMesh key={`${sprite.id}-${index}`} sprite={sprite} texture={sphereTexture} />
+      {peers.map((peer, index) => (
+        <PeerSphere key={`${peer.id}-${index}`} peer={peer} texture={peerTexture} />
       ))}
       <CameraPersistenceControls projectId={projectId} onTestApiReady={onCameraTestApiReady} />
     </>

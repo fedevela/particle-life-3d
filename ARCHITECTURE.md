@@ -126,6 +126,39 @@ Responsibilities:
 - Bridge-level: request errors are normalized and pending requests are rejected on worker failures.
 - Worker-level: invalid payloads or persistence failures return structured error responses.
 
+## Domain language & terminology
+
+This project uses specific terminology to describe its 3D, simulation, and testing components.
+
+- **Scene**: The top-level 3D container managed by React Three Fiber (`<Canvas>`). It encompasses the camera, lights, and all rendered entities.
+- **3D**: The spatial dimension of the simulations. While the logic may be 2D or 3D, all rendering occurs in a 3D coordinate system (X, Y, Z).
+- **Swarm**: A collection of autonomous particles (agents) that exhibit collective behavior. In this project, "Swarm Walk" refers to a GPU-accelerated simulation of these agents.
+- **Peer**: An individual agent or particle within a population. "Peer-to-peer" interactions (like attraction or repulsion) drive the emergent behavior of the swarm.
+- **Deterministic Simulation**: A simulation designed to produce identical results given the same input seed and frame number. This is critical for contract testing.
+- **Contract Tests**: E2E tests that verify the "contract" of the application state (e.g., SQLite row content or GPU buffer readbacks) against stable text fixtures.
+- **WebGL / GLSL**: The technology stack used for hardware-accelerated rendering and compute. GLSL (OpenGL Shading Language) is used to write the vertex, fragment, and "compute" shaders.
+- **E2E Tests**: In this project, E2E (End-to-End) refers to Playwright tests that run against the full application, including the UI, 3D scene, and persistence layers.
+- **OPFS (Origin Private File System)**: A high-performance browser storage API used by the SQLite WASM worker to persist data locally.
+- **GPU Readback**: The process of pulling simulation data from the graphics card's memory back to the CPU (as a `Float32Array`) for verification in tests.
+
+## Testing architecture
+
+The application uses Playwright for both UI functional testing and deterministic contract testing of 3D simulations and the persistence layer.
+
+### Contract testing
+
+Contract tests validate that the internal state of the application (e.g., SQLite data or GPU simulation milestones) remains consistent across changes.
+
+- **Determinism:** Simulations use seeded RNGs to ensure repeatable results at specific frames (0, 30, 60, 90).
+- **Test APIs:** Features expose their internal state through standardized global APIs like `window.__GET_<NAME>_CONTRACT_TEXT__` and `window.__RESET_<NAME>_SIM_FOR_TEST__`.
+- **Fixtures:** Stable text-based contracts are stored in `tests/contracts/`.
+- **Fixture Management:** A shared `fixture-helper.ts` utility handles reading, comparing, and updating these fixtures.
+- **Workflow:** Fixtures are updated explicitly using `npm run test:update-fixtures <test-file>`.
+
+### UI testing
+
+UI tests (`tests/*.ui.spec.ts`) verify navigation, component mounting, and basic interaction patterns using Playwright's standard assertions.
+
 ## Extension points for new features
 
 When adding new persisted entities:
@@ -136,9 +169,17 @@ When adding new persisted entities:
 4. Add SQL operations in `app/db/worker/sqlite-repository.ts`.
 5. Add bridge helpers in `app/db/client-bridge/bridge.ts`.
 6. Consume via feature-specific hooks in `app/hooks/`.
+7. **Add contract tests** in `tests/` to ensure the new persistence logic is stable.
 
 When adding new UI pages:
 
 1. Add route entries in `app/routes.ts`.
 2. Create route modules in `app/routes/`.
 3. Compose with feature modules in `app/features/`.
+4. **Add UI tests** to verify navigation and basic rendering.
+
+When adding new 3D simulations:
+
+1. Implement deterministic logic with seeded RNG.
+2. Expose the `__GET_..._CONTRACT_TEXT__` and `__RESET_...__` APIs.
+3. Create a `.contract.spec.ts` test and generate initial fixtures.

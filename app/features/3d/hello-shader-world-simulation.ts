@@ -12,7 +12,7 @@ import {
 
 /** Define the square texture size used by GPU simulation state. */
 export const SHADER_TEXTURE_SIZE = 32;
-export const SHADER_PARTICLE_CAPACITY = SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE;
+export const SHADER_PEER_CAPACITY = SHADER_TEXTURE_SIZE * SHADER_TEXTURE_SIZE;
 /** Define exact frame numbers where the shader publishes milestone contracts. */
 export const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 /** Define a fixed simulation timestep used for deterministic frame progression. */
@@ -32,7 +32,7 @@ export type ShaderMilestone = {
  *
  * This class keeps shader-state reporting in-memory for E2E harness usage.
  */
-export class HelloShaderWorldSimulation {
+export class DeterministicShaderSimulation {
   /** Hold WebGL renderer used for compute and readback. */
   private readonly renderer: THREE.WebGLRenderer;
 
@@ -41,7 +41,7 @@ export class HelloShaderWorldSimulation {
   private readonly stateVariable: Variable;
 
   /** Keep current simulation frame + elapsed time progression. */
-  private frame = 0;
+  private currentFrame = 0;
   private elapsedTimeSeconds = 0;
   private readonly seedText: string;
   private readonly seedValue: number;
@@ -52,12 +52,12 @@ export class HelloShaderWorldSimulation {
   private readonly milestoneContracts = new Map<number, string>();
 
   /** Reuse one readback buffer to avoid allocations during milestone snapshots. */
-  private readonly readbackBuffer = new Float32Array(SHADER_PARTICLE_CAPACITY * 4);
+  private readonly gpuReadbackBuffer = new Float32Array(SHADER_PEER_CAPACITY * 4);
   private readonly stagingTexture: THREE.DataTexture;
 
-  /** Keep active particle indexes to support deterministic add/remove operations. */
-  private readonly activeParticleIndexes: number[] = [];
-  private readonly activeIndexByParticle = new Int32Array(SHADER_PARTICLE_CAPACITY).fill(-1);
+  /** Keep active peer indexes to support deterministic add/remove operations. */
+  private readonly activePeerIndexes: number[] = [];
+  private readonly activeIndexByPeer = new Int32Array(SHADER_PEER_CAPACITY).fill(-1);
 
   /** Initialize GPU simulation resources and seed frame 0 state. */
   constructor(renderer: THREE.WebGLRenderer, seed: string) {
@@ -99,12 +99,12 @@ export class HelloShaderWorldSimulation {
     const error = this.gpuCompute.init();
     capabilities.maxVertexTextures = originalMaxVertexTextures;
     if (error) {
-      throw new Error(`Failed to initialize GPU simulation: ${error}`);
+      throw new Error(`Failed to initialize Deterministic Shader GPU simulation: ${error}`);
     }
 
     this.computeFrame(0);
     this.captureMilestoneIfNeeded(0);
-    logger.info("Initialized GPU simulation and captured frame 0 contract.");
+    logger.info("Initialized Deterministic Shader GPU simulation and captured frame 0 contract.");
   }
 
   /** Release GPU computation resources. */
@@ -112,14 +112,14 @@ export class HelloShaderWorldSimulation {
     this.gpuCompute.dispose();
   }
 
-  /** Return current GPU texture used by particle render shaders. */
+  /** Return current GPU texture used by peer render shaders. */
   public getStateTexture() {
     return this.gpuCompute.getCurrentRenderTarget(this.stateVariable).texture;
   }
 
   /** Return current simulation frame number. */
   public getCurrentFrame() {
-    return this.frame;
+    return this.currentFrame;
   }
 
   public setMovementParams(nextParams: HelloShaderWorldMovementParams) {
@@ -128,7 +128,7 @@ export class HelloShaderWorldSimulation {
 
   /** Reset simulation progression and clear all previously captured milestones. */
   public reset() {
-    this.frame = 0;
+    this.currentFrame = 0;
     this.elapsedTimeSeconds = 0;
     this.rngState = this.hashSeedUint(this.seedText);
     this.milestoneContracts.clear();
@@ -138,25 +138,25 @@ export class HelloShaderWorldSimulation {
     logger.info("Reset GPU simulation to frame 0.");
   }
 
-  /** Return currently active ball count. */
-  public getActiveParticleCount() {
-    return this.activeParticleIndexes.length;
+  /** Return currently active peer count. */
+  public getActivePeerCount() {
+    return this.activePeerIndexes.length;
   }
 
-  /** Activate up to `amount` inactive particles at world center. */
-  public addParticles(amount: number) {
+  /** Activate up to `amount` inactive peers at world center. */
+  public addPeers(amount: number) {
     const requestedAmount = this.normalizeRequestedAmount(amount);
     if (requestedAmount === 0) {
       return [] as number[];
     }
 
     this.readCurrentStateBuffer();
-    const data = this.readbackBuffer;
+    const data = this.gpuReadbackBuffer;
     const addedIndexes: number[] = [];
 
     let added = 0;
-    for (let index = 0; index < SHADER_PARTICLE_CAPACITY && added < requestedAmount; index += 1) {
-      if (this.activeIndexByParticle[index] !== -1) {
+    for (let index = 0; index < SHADER_PEER_CAPACITY && added < requestedAmount; index += 1) {
+      if (this.activeIndexByPeer[index] !== -1) {
         continue;
       }
 
@@ -168,7 +168,7 @@ export class HelloShaderWorldSimulation {
       data[offset + 1] = Math.sin(spawnAngle) * spawnRadius;
       data[offset + 2] = Math.cos(spawnAngle) * spawnSpeed;
       data[offset + 3] = Math.sin(spawnAngle) * spawnSpeed;
-      this.markParticleActive(index);
+      this.markPeerActive(index);
       addedIndexes.push(index);
       added += 1;
     }
@@ -180,21 +180,21 @@ export class HelloShaderWorldSimulation {
     return addedIndexes;
   }
 
-  /** Remove up to `amount` currently active particles using deterministic random selection. */
-  public removeParticles(amount: number) {
+  /** Remove up to `amount` currently active peers using deterministic random selection. */
+  public removePeers(amount: number) {
     const requestedAmount = this.normalizeRequestedAmount(amount);
-    if (requestedAmount === 0 || this.activeParticleIndexes.length === 0) {
+    if (requestedAmount === 0 || this.activePeerIndexes.length === 0) {
       return [] as number[];
     }
 
     const removedIndexes: number[] = [];
 
     let removed = 0;
-    for (; removed < requestedAmount && this.activeParticleIndexes.length > 0; removed += 1) {
-      const randomIndex = Math.floor(this.nextRandom() * this.activeParticleIndexes.length);
-      const particleIndex = this.activeParticleIndexes[randomIndex];
-      this.markParticleInactive(particleIndex);
-      removedIndexes.push(particleIndex);
+    for (; removed < requestedAmount && this.activePeerIndexes.length > 0; removed += 1) {
+      const randomIndex = Math.floor(this.nextRandom() * this.activePeerIndexes.length);
+      const peerIndex = this.activePeerIndexes[randomIndex];
+      this.markPeerInactive(peerIndex);
+      removedIndexes.push(peerIndex);
     }
 
     return removedIndexes;
@@ -202,8 +202,8 @@ export class HelloShaderWorldSimulation {
 
   /** Advance simulation by one frame and capture milestone report when configured. */
   public step() {
-    const nextFrame = this.frame + 1;
-    this.frame = nextFrame;
+    const nextFrame = this.currentFrame + 1;
+    this.currentFrame = nextFrame;
     this.elapsedTimeSeconds += FIXED_TIME_STEP_SECONDS;
 
     this.computeFrame(nextFrame);
@@ -276,14 +276,14 @@ export class HelloShaderWorldSimulation {
       return 0;
     }
 
-    return Math.max(0, Math.min(Math.floor(amount), SHADER_PARTICLE_CAPACITY));
+    return Math.max(0, Math.min(Math.floor(amount), SHADER_PEER_CAPACITY));
   }
 
   private writeInitialState(data: Float32Array) {
     data.fill(0);
-    this.activeParticleIndexes.length = 0;
-    this.activeIndexByParticle.fill(-1);
-    this.markParticleActive(0);
+    this.activePeerIndexes.length = 0;
+    this.activeIndexByPeer.fill(-1);
+    this.markPeerActive(0);
   }
 
   private resetGpuState() {
@@ -298,7 +298,7 @@ export class HelloShaderWorldSimulation {
 
   private readCurrentStateBuffer() {
     const target = this.gpuCompute.getCurrentRenderTarget(this.stateVariable);
-    this.renderer.readRenderTargetPixels(target, 0, 0, SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.readbackBuffer);
+    this.renderer.readRenderTargetPixels(target, 0, 0, SHADER_TEXTURE_SIZE, SHADER_TEXTURE_SIZE, this.gpuReadbackBuffer);
   }
 
   private writeStateToGpu(data: Float32Array) {
@@ -324,26 +324,26 @@ export class HelloShaderWorldSimulation {
     return stateVariableWithTargets.renderTargets;
   }
 
-  private markParticleActive(index: number) {
-    if (this.activeIndexByParticle[index] !== -1) {
+  private markPeerActive(index: number) {
+    if (this.activeIndexByPeer[index] !== -1) {
       return;
     }
 
-    this.activeIndexByParticle[index] = this.activeParticleIndexes.length;
-    this.activeParticleIndexes.push(index);
+    this.activeIndexByPeer[index] = this.activePeerIndexes.length;
+    this.activePeerIndexes.push(index);
   }
 
-  private markParticleInactive(index: number) {
-    const activeIndex = this.activeIndexByParticle[index];
+  private markPeerInactive(index: number) {
+    const activeIndex = this.activeIndexByPeer[index];
     if (activeIndex === -1) {
       return;
     }
 
-    const lastParticleIndex = this.activeParticleIndexes[this.activeParticleIndexes.length - 1];
-    this.activeParticleIndexes[activeIndex] = lastParticleIndex;
-    this.activeIndexByParticle[lastParticleIndex] = activeIndex;
-    this.activeParticleIndexes.pop();
-    this.activeIndexByParticle[index] = -1;
+    const lastPeerIndex = this.activePeerIndexes[this.activePeerIndexes.length - 1];
+    this.activePeerIndexes[activeIndex] = lastPeerIndex;
+    this.activeIndexByPeer[lastPeerIndex] = activeIndex;
+    this.activePeerIndexes.pop();
+    this.activeIndexByPeer[index] = -1;
   }
 
   /** Capture and store milestone text when this frame is configured as a report point. */
@@ -360,13 +360,13 @@ export class HelloShaderWorldSimulation {
       0,
       SHADER_TEXTURE_SIZE,
       SHADER_TEXTURE_SIZE,
-      this.readbackBuffer,
+      this.gpuReadbackBuffer,
     );
 
     const contractText = getShaderContractText({
       frame,
       textureSize: SHADER_TEXTURE_SIZE,
-      values: new Float32Array(this.readbackBuffer),
+      values: new Float32Array(this.gpuReadbackBuffer),
     });
 
     this.milestoneContracts.set(frame, contractText);
