@@ -86,7 +86,7 @@ function GPUInstancedPeers({ simulation }: { simulation: DeterministicSwarmSimul
   }, []);
 
   // We use a custom shader to position peers using the texture
-  const onBeforeCompile = (shader: THREE.Shader) => {
+  const onBeforeCompile = (shader: any) => {
     shader.uniforms.texturePosition = { value: null };
     shader.vertexShader = `
       uniform sampler2D texturePosition;
