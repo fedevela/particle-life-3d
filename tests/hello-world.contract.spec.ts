@@ -1,22 +1,18 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { CAMERA_ACTIONS, type CameraAction } from "../app/features/3d/camera-actions";
+import { checkOrUpdateFixture } from "./contracts/fixture-helper";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FIXTURES_DIR = path.join(__dirname, "contracts");
 
 const CAMERA_CONTRACT_CASES = CAMERA_ACTIONS.map((action, index) => ({
   action,
   fixtureName: `hello-world.camera.step-${String(index + 1).padStart(2, "0")}.txt`,
 }));
-
-async function readContractFixture(fileName: string) {
-  const fixturePath = path.join(__dirname, "contracts", fileName);
-  return readFile(fixturePath, "utf8");
-}
 
 function createProjectId() {
   return `pw-hello-world-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
@@ -83,8 +79,8 @@ test.describe.serial("hello-world camera contract", () => {
     await setupPage.goto(`/hello-world?testMode=true&projectId=${setupProjectId}&seed=hello`);
     await waitForTestApis(setupPage);
 
-    const initialFixture = await readContractFixture("hello-world.initial.txt");
-    await expect.poll(async () => getRawContractText(setupPage, setupProjectId)).toBe(initialFixture);
+    const actualInitial = await getRawContractText(setupPage, setupProjectId);
+    await checkOrUpdateFixture(FIXTURES_DIR, "hello-world.initial.txt", actualInitial);
   });
 
   for (const { action, fixtureName } of CAMERA_CONTRACT_CASES) {
@@ -98,8 +94,15 @@ test.describe.serial("hello-world camera contract", () => {
 
       await applyCameraAction(testPage, action, testProjectId);
 
-      const expectedFixture = await readContractFixture(fixtureName);
-      await expect.poll(async () => getRawContractText(testPage, testProjectId)).toBe(expectedFixture);
+      await expect.poll(async () => {
+        try {
+          const actualText = await getRawContractText(testPage, testProjectId);
+          await checkOrUpdateFixture(FIXTURES_DIR, fixtureName, actualText);
+          return true;
+        } catch {
+          return false;
+        }
+      }).toBe(true);
     });
   }
 

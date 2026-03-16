@@ -43,6 +43,10 @@ Open `http://localhost:5173`.
 - `npm run build` - Build the production server/client bundles.
 - `npm run start` - Serve the built app from `build/server/index.js`.
 - `npm run typecheck` - Run route type generation and TypeScript checks.
+- `npm test` - Run all contract tests.
+- `npm run test:contract` - Run only contract tests.
+- `npm run test:ui` - Run Playwright UI tests.
+- `npm run test:update-fixtures <file>` - Update contract fixtures for a specific test file (e.g., `npm run test:update-fixtures tests/swarm-walk.contract.spec.ts`).
 
 ## Project structure
 

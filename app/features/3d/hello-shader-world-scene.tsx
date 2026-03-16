@@ -6,8 +6,8 @@ import * as THREE from "three";
 import fragmentShader from "~/features/3d/shaders/hello-shader-world.frag";
 import vertexShader from "~/features/3d/shaders/hello-shader-world.vert";
 import {
-  HelloShaderWorldSimulation,
-  SHADER_PARTICLE_CAPACITY,
+  DeterministicShaderSimulation,
+  SHADER_PEER_CAPACITY,
   SHADER_TEXTURE_SIZE,
 } from "~/features/3d/hello-shader-world-simulation";
 import { createLogger } from "~/lib/logger";
@@ -31,13 +31,13 @@ type HelloShaderWorldSceneProps = {
 
 /** Create the static position attribute expected by Three Points geometry. */
 function createPositionAttribute() {
-  return new THREE.BufferAttribute(new Float32Array(SHADER_PARTICLE_CAPACITY * 3), 3);
+  return new THREE.BufferAttribute(new Float32Array(SHADER_PEER_CAPACITY * 3), 3);
 }
 
-/** Create a UV reference per particle texel for shader texture lookup. */
+/** Create a UV reference per peer texel for shader texture lookup. */
 function createReferenceAttribute() {
-  const references = new Float32Array(SHADER_PARTICLE_CAPACITY * 2);
-  for (let index = 0; index < SHADER_PARTICLE_CAPACITY; index += 1) {
+  const references = new Float32Array(SHADER_PEER_CAPACITY * 2);
+  for (let index = 0; index < SHADER_PEER_CAPACITY; index += 1) {
     const x = index % SHADER_TEXTURE_SIZE;
     const y = Math.floor(index / SHADER_TEXTURE_SIZE);
     const offset = index * 2;
@@ -49,7 +49,7 @@ function createReferenceAttribute() {
 }
 
 function createActiveAttribute() {
-  const active = new Float32Array(SHADER_PARTICLE_CAPACITY);
+  const active = new Float32Array(SHADER_PEER_CAPACITY);
   active[0] = 1;
   return new THREE.BufferAttribute(active, 1);
 }
@@ -57,7 +57,7 @@ function createActiveAttribute() {
 export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorldSceneProps) {
   const { gl } = useThree();
   const canRenderSimulation = gl.capabilities.maxVertexTextures > 0;
-  const simulationRef = useRef<HelloShaderWorldSimulation | null>(null);
+  const simulationRef = useRef<DeterministicShaderSimulation | null>(null);
   const helloShaderWorldActionQueue = useUiStore((state) => state.helloShaderWorldActionQueue);
   const dequeueHelloShaderWorldAction = useUiStore((state) => state.dequeueHelloShaderWorldAction);
   const movementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
@@ -83,7 +83,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
 
   useEffect(() => {
     try {
-      const simulation = new HelloShaderWorldSimulation(gl, seed);
+      const simulation = new DeterministicShaderSimulation(gl, seed);
       simulation.setMovementParams(movementParams);
       simulationRef.current = simulation;
       uniforms.uState.value = simulation.getStateTexture();
@@ -92,7 +92,7 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
       setError(
         initializationError instanceof Error
           ? initializationError
-          : new Error("Failed to initialize hello-shader-world simulation."),
+          : new Error("Failed to initialize deterministic shader simulation."),
       );
     }
 
@@ -155,13 +155,13 @@ export function HelloShaderWorldScene({ seed, onTestApiReady }: HelloShaderWorld
     }
 
     if (pendingAction.type === "add") {
-      const addedIndexes = simulation.addParticles(pendingAction.amount);
+      const addedIndexes = simulation.addPeers(pendingAction.amount);
       for (const index of addedIndexes) {
         activeAttribute.array[index] = 1;
       }
       activeAttribute.needsUpdate = true;
     } else {
-      const removedIndexes = simulation.removeParticles(pendingAction.amount);
+      const removedIndexes = simulation.removePeers(pendingAction.amount);
       for (const index of removedIndexes) {
         activeAttribute.array[index] = 0;
       }

@@ -6,5 +6,6 @@ export default [
     index("routes/dashboard-home.tsx"),
     route("hello-world", "routes/hello-world.tsx"),
     route("hello-shader-world", "routes/hello-shader-world.tsx"),
+    route("swarm-walk", "routes/swarm-walk.tsx"),
   ]),
 ] satisfies RouteConfig;

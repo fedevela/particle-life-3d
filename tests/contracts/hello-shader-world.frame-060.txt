@@ -1,7 +1,7 @@
 [shader]
 frame=60
 texture_size=32
-particle_count=1024
+peer_count=1024
 avg_x=0.05
 avg_y=-0.06
 avg_vx=0.00

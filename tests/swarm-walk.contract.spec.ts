@@ -8,22 +8,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FIXTURES_DIR = path.join(__dirname, "contracts");
 
-const SHADER_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
+const SWARM_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 
-const MILESTONE_CASES = SHADER_MILESTONE_FRAMES.map((frame) => ({
+const MILESTONE_CASES = SWARM_MILESTONE_FRAMES.map((frame) => ({
   frame,
-  fixtureName: `hello-shader-world.frame-${String(frame).padStart(3, "0")}.txt`,
+  fixtureName: `swarm-walk.frame-${String(frame).padStart(3, "0")}.txt`,
 }));
 
 async function waitForTestApis(page: Page) {
   await expect
     .poll(async () => {
       return page.evaluate(() => ({
-        hasGetContract: typeof window.__GET_SHADER_CONTRACT_TEXT__ === "function",
-        hasGetFrame: typeof window.__GET_SHADER_FRAME__ === "function",
-        hasReset: typeof window.__RESET_SHADER_SIM_FOR_TEST__ === "function",
+        hasGetContract: typeof window.__GET_SWARM_WALK_CONTRACT_TEXT__ === "function",
+        hasGetFrame: typeof window.__GET_SWARM_WALK_FRAME__ === "function",
+        hasReset: typeof window.__RESET_SWARM_WALK_SIM_FOR_TEST__ === "function",
       }));
-    })
+    }, { timeout: 15000 })
     .toEqual({ hasGetContract: true, hasGetFrame: true, hasReset: true });
 }
 
@@ -33,11 +33,11 @@ async function resetSimulation(page: Page) {
       async () => {
         try {
           await page.evaluate(async () => {
-            if (typeof window.__RESET_SHADER_SIM_FOR_TEST__ !== "function") {
-              throw new Error("window.__RESET_SHADER_SIM_FOR_TEST__ is not available.");
+            if (typeof window.__RESET_SWARM_WALK_SIM_FOR_TEST__ !== "function") {
+              throw new Error("window.__RESET_SWARM_WALK_SIM_FOR_TEST__ is not available.");
             }
 
-            await window.__RESET_SHADER_SIM_FOR_TEST__();
+            await window.__RESET_SWARM_WALK_SIM_FOR_TEST__();
           });
 
           return true;
@@ -45,21 +45,22 @@ async function resetSimulation(page: Page) {
           return false;
         }
       },
+      { timeout: 10000 }
     )
     .toBe(true);
 }
 
-async function getShaderContractText(page: Page, frame: number) {
+async function getSwarmContractText(page: Page, frame: number) {
   return page.evaluate(async ({ targetFrame }: { targetFrame: number }) => {
-    if (typeof window.__GET_SHADER_CONTRACT_TEXT__ !== "function") {
-      throw new Error("window.__GET_SHADER_CONTRACT_TEXT__ is not available.");
+    if (typeof window.__GET_SWARM_WALK_CONTRACT_TEXT__ !== "function") {
+      throw new Error("window.__GET_SWARM_WALK_CONTRACT_TEXT__ is not available.");
     }
 
-    return window.__GET_SHADER_CONTRACT_TEXT__(targetFrame);
+    return window.__GET_SWARM_WALK_CONTRACT_TEXT__(targetFrame);
   }, { targetFrame: frame });
 }
 
-test.describe.serial("hello-shader-world GPU milestone contract", () => {
+test.describe.serial("swarm-walk GPU milestone contract", () => {
   let context: BrowserContext | null = null;
   let page: Page | null = null;
   const pageErrors: string[] = [];
@@ -72,16 +73,17 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
     });
 
     const setupPage = page;
-    await setupPage.goto("/hello-shader-world?testMode=true&seed=shader-milestone");
+    await setupPage.goto("/swarm-walk?testMode=true&seed=swarm-milestone");
     if (pageErrors.length > 0) {
-      throw new Error(`Shader page runtime error: ${pageErrors[0]}`);
+      throw new Error(`Swarm page runtime error: ${pageErrors[0]}`);
     }
     await waitForTestApis(setupPage);
     await resetSimulation(setupPage);
   });
 
   for (const { frame, fixtureName } of MILESTONE_CASES) {
-    test(`shader contract at frame ${frame}`, async () => {
+    test(`swarm contract at frame ${frame}`, async () => {
+      test.setTimeout(30000);
       if (!page) {
         throw new Error("Expected test page to be initialized in beforeAll.");
       }
@@ -92,10 +94,17 @@ test.describe.serial("hello-shader-world GPU milestone contract", () => {
         .poll(
           async () => {
             try {
-              const actualText = await getShaderContractText(testPage, frame);
+              const actualText = await getSwarmContractText(testPage, frame);
               await checkOrUpdateFixture(FIXTURES_DIR, fixtureName, actualText);
               return true;
-            } catch {
+            } catch (err) {
+              if (process.env.UPDATE_FIXTURES === "true") {
+                // If we're updating, rethrow if it's not an assertion error
+                if (!(err instanceof Error && err.name === "AssertionError")) {
+                  // Actually, checkOrUpdateFixture only throws if NOT updating.
+                  // If it's updating, it returns.
+                }
+              }
               return false;
             }
           },

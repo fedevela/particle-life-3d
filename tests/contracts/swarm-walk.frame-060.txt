@@ -1,0 +1,11 @@
+[swarm-walk]
+frame=60
+peer_count=1024
+avg_x=-0.06
+avg_y=0.00
+avg_z=-0.08
+max_radius=7.00
+checksum=f88dc6f4361764510ac661c9631a1d62
+sample_0=1.78,-0.36,0.26
+sample_1=2.06,0.64,-3.04
+sample_2=-3.67,0.47,-1.84

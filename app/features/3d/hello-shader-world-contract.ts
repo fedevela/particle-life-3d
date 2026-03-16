@@ -50,11 +50,11 @@ function readStateTuple(values: Float32Array, index: number) {
  * This is intentionally plain text so Playwright can compare it to fixtures directly.
  */
 export function getShaderContractText(snapshot: ShaderStateSnapshot) {
-  const particleCount = snapshot.textureSize * snapshot.textureSize;
+  const peerCount = snapshot.textureSize * snapshot.textureSize;
 
-  if (snapshot.values.length !== particleCount * 4) {
+  if (snapshot.values.length !== peerCount * 4) {
     throw new Error(
-      `Unexpected snapshot buffer size. Expected ${particleCount * 4} float entries and received ${snapshot.values.length}.`,
+      `Unexpected snapshot buffer size. Expected ${peerCount * 4} float entries and received ${snapshot.values.length}.`,
     );
   }
 
@@ -67,7 +67,7 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
   let checksumA = 0xcbf29ce484222325n;
   let checksumB = 0x84222325cbf29cen;
 
-  for (let index = 0; index < particleCount; index += 1) {
+  for (let index = 0; index < peerCount; index += 1) {
     const next = readStateTuple(snapshot.values, index);
     const radius = Math.hypot(next.x, next.y);
     const speed = Math.hypot(next.vx, next.vy);
@@ -99,7 +99,7 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
 
   const checksum = `${toHex16(checksumA)}${toHex16(checksumB)}`;
 
-  const sampleIndexes = [0, Math.floor(particleCount / 2), particleCount - 1];
+  const sampleIndexes = [0, Math.floor(peerCount / 2), peerCount - 1];
   const sampleLines = sampleIndexes.map((sampleIndex, orderIndex) => {
     const sample = readStateTuple(snapshot.values, sampleIndex);
     return [
@@ -118,12 +118,12 @@ export function getShaderContractText(snapshot: ShaderStateSnapshot) {
     "[shader]",
     `frame=${snapshot.frame}`,
     `texture_size=${snapshot.textureSize}`,
-    `particle_count=${particleCount}`,
-    `avg_x=${formatTwoDecimals(sumX / particleCount)}`,
-    `avg_y=${formatTwoDecimals(sumY / particleCount)}`,
-    `avg_vx=${formatTwoDecimals(sumVx / particleCount)}`,
-    `avg_vy=${formatTwoDecimals(sumVy / particleCount)}`,
-    `avg_speed=${formatTwoDecimals(sumSpeed / particleCount)}`,
+    `peer_count=${peerCount}`,
+    `avg_x=${formatTwoDecimals(sumX / peerCount)}`,
+    `avg_y=${formatTwoDecimals(sumY / peerCount)}`,
+    `avg_vx=${formatTwoDecimals(sumVx / peerCount)}`,
+    `avg_vy=${formatTwoDecimals(sumVy / peerCount)}`,
+    `avg_speed=${formatTwoDecimals(sumSpeed / peerCount)}`,
     `max_radius=${formatTwoDecimals(maxRadius)}`,
     `checksum=${checksum}`,
     ...sampleLines,

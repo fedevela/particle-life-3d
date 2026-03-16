@@ -7,6 +7,10 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
+    "test": "playwright test",
+    "test:contract": "playwright test --config playwright.config.ts",
+    "test:ui": "playwright test --config playwright.config.ts",
+    "test:update-fixtures": "UPDATE_FIXTURES=true playwright test",
     "test:e2e": "playwright test --max-failures=1",
     "test:e2e:hello-world": "playwright test tests/hello-world*.spec.ts --max-failures=1 --reporter=list",
     "test:e2e:hello-shader-world": "playwright test tests/hello-shader-world*.spec.ts --max-failures=1 --reporter=list"

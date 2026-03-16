@@ -1,5 +1,5 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles } from "lucide-react";
+import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles, Activity } from "lucide-react";
 import { useRef, type WheelEvent } from "react";
 import { NavLink, Outlet } from "react-router";
 
@@ -36,6 +36,36 @@ function applyWheelStep(current: number, step: number, min: number | null, max: 
 function getMovementInputValue(key: HelloShaderWorldMovementParamKey, value: number) {
   const decimals = getDecimals(HELLO_SHADER_WORLD_MOVEMENT_CONTROLS[key].step);
   return value.toFixed(decimals);
+}
+
+interface SidebarNavLinkProps {
+  to: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  isExpanded: boolean;
+  end?: boolean;
+  onClick?: () => void;
+}
+
+function SidebarNavLink({ to, icon: Icon, label, isExpanded, end, onClick }: SidebarNavLinkProps) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      onClick={onClick}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+          isActive
+            ? "bg-cyan-400/20 text-cyan-100"
+            : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+        )
+      }
+    >
+      <Icon size={16} className="shrink-0" />
+      <span className={cn(!isExpanded && "sr-only")}>{label}</span>
+    </NavLink>
+  );
 }
 
 /**
@@ -110,21 +140,13 @@ export default function DashboardShell() {
           </div>
 
           <nav className="px-3 py-4">
-            <NavLink
+            <SidebarNavLink
               to="/"
               end
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  isActive
-                    ? "bg-cyan-400/20 text-cyan-100"
-                    : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
-                )
-              }
-            >
-              <Sparkles size={16} className="shrink-0" />
-              <span className={cn(!isExpanded && "sr-only")}>Hello World</span>
-            </NavLink>
+              icon={Sparkles}
+              label="Hello World"
+              isExpanded={isExpanded}
+            />
             <div className="mt-2">
               <NavLink
                 to="/hello-shader-world"
@@ -216,6 +238,14 @@ export default function DashboardShell() {
                   </div>
                 </div>
               ) : null}
+            </div>
+            <div className="mt-2">
+              <SidebarNavLink
+                to="/swarm-walk"
+                icon={Activity}
+                label="Swarm-Walk"
+                isExpanded={isExpanded}
+              />
             </div>
           </nav>
         </aside>
