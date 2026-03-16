@@ -4,3 +4,5 @@ seed=traceability-placeholder
 particle_count=0
 avg_p=0.00,0.00,0.00
 avg_v=0.00,0.00,0.00
+out_of_bounds=0
+stationary=0
