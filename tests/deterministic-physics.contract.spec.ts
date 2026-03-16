@@ -172,12 +172,11 @@ test.describe("Scenario: Initializing the deterministic physics environment", ()
     expect(contract30_bounce).toContain("out_of_bounds=0");
 
     // 2. Toggle to Infinity Mode via UI
-    // First expand the submenu (click the chevron button to avoid navigation)
-    // We target the button with the aria-label "Toggle Swarm-Walk submenu"
-    await page.getByLabel("Toggle Swarm-Walk submenu").click();
+    // First expand the submenu (click the whole menu item)
+    await page.getByRole("link", { name: "Deterministic Physics" }).click();
     
     // Now the toggle should be visible
-    await page.click('#boundary-toggle');
+    await page.click('#physics-boundary-toggle');
     
     // Reload to ensure full reset with same seed if needed, or just reset sim
     // Actually, the toggle updates the runtime uniform, but we need to compare same start
@@ -185,8 +184,8 @@ test.describe("Scenario: Initializing the deterministic physics environment", ()
     await page.waitForFunction(() => (window as any).__DETERMINISTIC_PHYSICS_TEST_API__);
     
     // Re-expand submenu after reload
-    await page.getByLabel("Toggle Swarm-Walk submenu").click();
-    await page.click('#boundary-toggle'); // Set to Wrap
+    await page.getByRole("link", { name: "Deterministic Physics" }).click();
+    await page.click('#physics-boundary-toggle'); // Set to Wrap
     
     await stepSim(30);
     const contract30_wrap = await getContract(30);

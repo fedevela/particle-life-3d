@@ -36,7 +36,7 @@ test("SWARM-010: Swarm-Walk navigation item matches visual style and interaction
   const helloWorldClasses = await helloWorldLink.getAttribute("class");
   const swarmWalkClasses = await swarmWalkLink.getAttribute("class");
   
-  // Both should have common layout classes from SidebarNavLink
+  // Both should have common layout classes
   expect(helloWorldClasses).toContain("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition");
   expect(swarmWalkClasses).toContain("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition");
 
