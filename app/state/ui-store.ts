@@ -41,6 +41,11 @@ type UiState = {
   toggleSidebar: () => void;
   isHelloShaderWorldSubmenuOpen: boolean;
   toggleHelloShaderWorldSubmenu: () => void;
+  isSwarmWalkSubmenuOpen: boolean;
+  toggleSwarmWalkSubmenu: () => void;
+  isDeterministicPhysicsSubmenuOpen: boolean;
+  toggleDeterministicPhysicsSubmenu: () => void;
+  closeAllSubmenus: () => void;
   helloShaderWorldAmountInput: string;
   setHelloShaderWorldAmountInput: (nextAmount: string) => void;
   helloShaderWorldActionQueue: HelloShaderWorldAction[];
@@ -49,6 +54,10 @@ type UiState = {
   helloShaderWorldMovementParams: HelloShaderWorldMovementParams;
   setHelloShaderWorldMovementParam: (key: HelloShaderWorldMovementParamKey, rawValue: string) => void;
   setHelloShaderWorldMovementParams: (nextParams: HelloShaderWorldMovementParams) => void;
+  
+  // Swarm-Walk / Physics State (Shared for now as per previous implementation)
+  swarmWalkBoundaryType: 'bounce' | 'wrap';
+  setSwarmWalkBoundaryType: (type: 'bounce' | 'wrap') => void;
 };
 
 /**
@@ -59,11 +68,38 @@ type UiState = {
 export const useUiStore = create<UiState>((set) => ({
   isExpanded: true,
   toggleSidebar: () => set((state) => ({ isExpanded: !state.isExpanded })),
+  
   isHelloShaderWorldSubmenuOpen: false,
   toggleHelloShaderWorldSubmenu: () =>
     set((state) => ({
       isHelloShaderWorldSubmenuOpen: !state.isHelloShaderWorldSubmenuOpen,
+      isSwarmWalkSubmenuOpen: false,
+      isDeterministicPhysicsSubmenuOpen: false,
     })),
+    
+  isSwarmWalkSubmenuOpen: false,
+  toggleSwarmWalkSubmenu: () =>
+    set((state) => ({
+      isSwarmWalkSubmenuOpen: !state.isSwarmWalkSubmenuOpen,
+      isHelloShaderWorldSubmenuOpen: false,
+      isDeterministicPhysicsSubmenuOpen: false,
+    })),
+
+  isDeterministicPhysicsSubmenuOpen: false,
+  toggleDeterministicPhysicsSubmenu: () =>
+    set((state) => ({
+      isDeterministicPhysicsSubmenuOpen: !state.isDeterministicPhysicsSubmenuOpen,
+      isHelloShaderWorldSubmenuOpen: false,
+      isSwarmWalkSubmenuOpen: false,
+    })),
+
+  closeAllSubmenus: () =>
+    set({
+      isHelloShaderWorldSubmenuOpen: false,
+      isSwarmWalkSubmenuOpen: false,
+      isDeterministicPhysicsSubmenuOpen: false,
+    }),
+
   helloShaderWorldAmountInput: "1",
   setHelloShaderWorldAmountInput: (nextAmount) => set({ helloShaderWorldAmountInput: nextAmount }),
   helloShaderWorldActionQueue: [],
@@ -94,4 +130,8 @@ export const useUiStore = create<UiState>((set) => ({
     set({
       helloShaderWorldMovementParams: clampHelloShaderWorldMovementParams(nextParams),
     }),
+
+  // Swarm-Walk / Physics Shared State
+  swarmWalkBoundaryType: 'bounce',
+  setSwarmWalkBoundaryType: (type) => set({ swarmWalkBoundaryType: type }),
 }));

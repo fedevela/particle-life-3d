@@ -1,5 +1,5 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles, Activity } from "lucide-react";
+import { CircleDot, ChevronDown, ChevronFirst, ChevronLast, Sparkles, Activity, Boxes } from "lucide-react";
 import { useRef, type WheelEvent } from "react";
 import { NavLink, Outlet } from "react-router";
 
@@ -68,6 +68,47 @@ function SidebarNavLink({ to, icon: Icon, label, isExpanded, end, onClick }: Sid
   );
 }
 
+interface SidebarCollapsibleNavProps {
+  to: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  isExpanded: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+function SidebarCollapsibleNav({ to, icon: Icon, label, isExpanded, isOpen, onToggle, children }: SidebarCollapsibleNavProps) {
+  return (
+    <div className="mt-2">
+      <NavLink
+        to={to}
+        onClick={onToggle}
+        className={({ isActive }) =>
+          cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+            isActive
+              ? "bg-cyan-400/20 text-cyan-100"
+              : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
+          )
+        }
+      >
+        <Icon size={16} className="shrink-0" />
+        <span className={cn("flex-1", !isExpanded && "sr-only")}>{label}</span>
+        <ChevronDown
+          size={14}
+          className={cn(
+            "shrink-0 transition-transform duration-200",
+            !isExpanded && "sr-only",
+            isOpen && "rotate-180",
+          )}
+        />
+      </NavLink>
+      {isExpanded && isOpen ? children : null}
+    </div>
+  );
+}
+
 /**
  * Render the dashboard layout route with navigation and an outlet region.
  *
@@ -76,14 +117,26 @@ function SidebarNavLink({ to, icon: Icon, label, isExpanded, end, onClick }: Sid
 export default function DashboardShell() {
   const isExpanded = useUiStore((state) => state.isExpanded);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  
   const isHelloShaderWorldSubmenuOpen = useUiStore((state) => state.isHelloShaderWorldSubmenuOpen);
   const toggleHelloShaderWorldSubmenu = useUiStore((state) => state.toggleHelloShaderWorldSubmenu);
+  
+  const isDeterministicPhysicsSubmenuOpen = useUiStore((state) => state.isDeterministicPhysicsSubmenuOpen);
+  const toggleDeterministicPhysicsSubmenu = useUiStore((state) => state.toggleDeterministicPhysicsSubmenu);
+  
+  const isSwarmWalkSubmenuOpen = useUiStore((state) => state.isSwarmWalkSubmenuOpen);
+  const toggleSwarmWalkSubmenu = useUiStore((state) => state.toggleSwarmWalkSubmenu);
+
+  const closeAllSubmenus = useUiStore((state) => state.closeAllSubmenus);
   const helloShaderWorldAmountInput = useUiStore((state) => state.helloShaderWorldAmountInput);
   const setHelloShaderWorldAmountInput = useUiStore((state) => state.setHelloShaderWorldAmountInput);
   const queueHelloShaderWorldAction = useUiStore((state) => state.queueHelloShaderWorldAction);
   const helloShaderWorldMovementParams = useUiStore((state) => state.helloShaderWorldMovementParams);
   const setHelloShaderWorldMovementParam = useUiStore((state) => state.setHelloShaderWorldMovementParam);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
+
+  const swarmWalkBoundaryType = useUiStore((state) => state.swarmWalkBoundaryType);
+  const setSwarmWalkBoundaryType = useUiStore((state) => state.setSwarmWalkBoundaryType);
 
   function queueAction(type: "add" | "remove") {
     const rawAmount = amountInputRef.current?.value ?? helloShaderWorldAmountInput;
@@ -146,107 +199,151 @@ export default function DashboardShell() {
               icon={Sparkles}
               label="Hello World"
               isExpanded={isExpanded}
+              onClick={closeAllSubmenus}
             />
-            <div className="mt-2">
-              <NavLink
-                to="/hello-shader-world"
-                onClick={toggleHelloShaderWorldSubmenu}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                    isActive
-                      ? "bg-cyan-400/20 text-cyan-100"
-                      : "text-slate-300 hover:bg-slate-700/50 hover:text-cyan-100",
-                  )
-                }
-              >
-                <CircleDot size={16} className="shrink-0" />
-                <span className={cn("flex-1", !isExpanded && "sr-only")}>Hello Shader World</span>
-                <ChevronDown
-                  size={14}
-                  className={cn(
-                    "shrink-0 transition-transform duration-200",
-                    !isExpanded && "sr-only",
-                    isHelloShaderWorldSubmenuOpen && "rotate-180",
-                  )}
-                />
-              </NavLink>
 
-              {isExpanded && isHelloShaderWorldSubmenuOpen ? (
-                <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
-                  <label className="block text-xs uppercase tracking-[0.14em] text-cyan-200" htmlFor="hello-shader-world-amount">
-                    Amount
-                  </label>
-                  <input
-                    ref={amountInputRef}
-                    id="hello-shader-world-amount"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={1024}
-                    step={1}
-                    title="How many particles Add or Remove applies."
-                    value={helloShaderWorldAmountInput}
-                    onChange={(event) => setHelloShaderWorldAmountInput(event.target.value)}
-                    onWheel={handleAmountWheel}
-                    className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => queueAction("add")}
-                      className="flex-1 rounded-md border border-cyan-700/80 bg-cyan-500/10 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-400/20"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => queueAction("remove")}
-                      className="flex-1 rounded-md border border-rose-700/70 bg-rose-500/10 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-rose-100 transition hover:bg-rose-400/20"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <div className="space-y-2 border-t border-cyan-900/40 pt-2">
-                    {HELLO_SHADER_WORLD_MOVEMENT_PARAM_ORDER.map((key) => {
-                      const control = HELLO_SHADER_WORLD_MOVEMENT_CONTROLS[key];
-                      return (
-                        <div key={key} className="space-y-1">
-                          <label
-                            className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
-                            htmlFor={`hello-shader-world-${key}`}
-                            title={control.tooltip}
-                          >
-                            {control.label}
-                          </label>
-                          <input
-                            id={`hello-shader-world-${key}`}
-                            type="number"
-                            inputMode="decimal"
-                            min={control.min}
-                            max={control.max}
-                            step={control.step}
-                            title={control.tooltip}
-                            value={getMovementInputValue(key, helloShaderWorldMovementParams[key])}
-                            onChange={(event) => setHelloShaderWorldMovementParam(key, event.target.value)}
-                            onWheel={(event) => handleMovementWheel(key, event)}
-                            className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
+            <SidebarCollapsibleNav
+              to="/hello-shader-world"
+              icon={CircleDot}
+              label="Hello Shader World"
+              isExpanded={isExpanded}
+              isOpen={isHelloShaderWorldSubmenuOpen}
+              onToggle={toggleHelloShaderWorldSubmenu}
+            >
+              <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
+                <label className="block text-xs uppercase tracking-[0.14em] text-cyan-200" htmlFor="hello-shader-world-amount">
+                  Amount
+                </label>
+                <input
+                  ref={amountInputRef}
+                  id="hello-shader-world-amount"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1024}
+                  step={1}
+                  title="How many particles Add or Remove applies."
+                  value={helloShaderWorldAmountInput}
+                  onChange={(event) => setHelloShaderWorldAmountInput(event.target.value)}
+                  onWheel={handleAmountWheel}
+                  className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => queueAction("add")}
+                    className="flex-1 rounded-md border border-cyan-700/80 bg-cyan-500/10 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-400/20"
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => queueAction("remove")}
+                    className="flex-1 rounded-md border border-rose-700/70 bg-rose-500/10 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-rose-100 transition hover:bg-rose-400/20"
+                  >
+                    Remove
+                  </button>
                 </div>
-              ) : null}
-            </div>
-            <div className="mt-2">
-              <SidebarNavLink
-                to="/swarm-walk"
-                icon={Activity}
-                label="Swarm-Walk"
-                isExpanded={isExpanded}
-              />
-            </div>
+                <div className="space-y-2 border-t border-cyan-900/40 pt-2">
+                  {HELLO_SHADER_WORLD_MOVEMENT_PARAM_ORDER.map((key) => {
+                    const control = HELLO_SHADER_WORLD_MOVEMENT_CONTROLS[key];
+                    return (
+                      <div key={key} className="space-y-1">
+                        <label
+                          className="block text-[10px] uppercase tracking-[0.12em] text-cyan-200"
+                          htmlFor={`hello-shader-world-${key}`}
+                          title={control.tooltip}
+                        >
+                          {control.label}
+                        </label>
+                        <input
+                          id={`hello-shader-world-${key}`}
+                          type="number"
+                          inputMode="decimal"
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          title={control.tooltip}
+                          value={getMovementInputValue(key, helloShaderWorldMovementParams[key])}
+                          onChange={(event) => setHelloShaderWorldMovementParam(key, event.target.value)}
+                          onWheel={(event) => handleMovementWheel(key, event)}
+                          className="w-full rounded-md border border-cyan-800/70 bg-slate-950/90 px-2 py-1.5 text-sm text-slate-100 outline-none ring-cyan-300/50 transition focus:ring-2"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </SidebarCollapsibleNav>
+
+            <SidebarCollapsibleNav
+              to="/deterministic-physics"
+              icon={Boxes}
+              label="Deterministic Physics"
+              isExpanded={isExpanded}
+              isOpen={isDeterministicPhysicsSubmenuOpen}
+              onToggle={toggleDeterministicPhysicsSubmenu}
+            >
+              <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="physics-boundary-toggle" className="text-xs uppercase tracking-[0.14em] text-cyan-200">
+                      Infinity Mode
+                  </label>
+                  <button
+                      id="physics-boundary-toggle"
+                      onClick={() => setSwarmWalkBoundaryType(swarmWalkBoundaryType === 'bounce' ? 'wrap' : 'bounce')}
+                      className={cn(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 focus:ring-offset-slate-900",
+                          swarmWalkBoundaryType === 'wrap' ? 'bg-cyan-600' : 'bg-slate-600'
+                      )}
+                      title="Toggle between Bounce (Box) and Wrap (Infinity) boundary modes"
+                  >
+                      <span className="sr-only">Toggle Infinity Mode</span>
+                      <span
+                          className={cn(
+                              "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
+                              swarmWalkBoundaryType === 'wrap' ? 'translate-x-5' : 'translate-x-1'
+                          )}
+                      />
+                  </button>
+                </div>
+              </div>
+            </SidebarCollapsibleNav>
+
+            <SidebarCollapsibleNav
+              to="/swarm-walk"
+              icon={Activity}
+              label="Swarm-Walk"
+              isExpanded={isExpanded}
+              isOpen={isSwarmWalkSubmenuOpen}
+              onToggle={toggleSwarmWalkSubmenu}
+            >
+              <div className="mt-2 space-y-2 rounded-lg border border-cyan-900/40 bg-slate-900/70 p-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="swarm-boundary-toggle" className="text-xs uppercase tracking-[0.14em] text-cyan-200">
+                      Infinity Mode
+                  </label>
+                  <button
+                      id="swarm-boundary-toggle"
+                      onClick={() => setSwarmWalkBoundaryType(swarmWalkBoundaryType === 'bounce' ? 'wrap' : 'bounce')}
+                      className={cn(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 focus:ring-offset-slate-900",
+                          swarmWalkBoundaryType === 'wrap' ? 'bg-cyan-600' : 'bg-slate-600'
+                      )}
+                      title="Toggle between Bounce (Box) and Wrap (Infinity) boundary modes"
+                  >
+                      <span className="sr-only">Toggle Infinity Mode</span>
+                      <span
+                          className={cn(
+                              "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
+                              swarmWalkBoundaryType === 'wrap' ? 'translate-x-5' : 'translate-x-1'
+                          )}
+                      />
+                  </button>
+                </div>
+              </div>
+            </SidebarCollapsibleNav>
+
           </nav>
         </aside>
       </Collapsible.Root>

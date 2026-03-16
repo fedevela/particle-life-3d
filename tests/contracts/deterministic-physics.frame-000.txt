@@ -1,0 +1,8 @@
+[deterministic-physics-baseline]
+frame=0
+seed=contract-test-seed
+particle_count=1024
+avg_p=0.01,-0.25,-0.06
+avg_v=0.00,0.00,0.00
+out_of_bounds=0
+stationary=1024
