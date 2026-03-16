@@ -13,28 +13,30 @@
  */
 
 /** Define the square texture size used by GPU simulation state. */
-export const PHYSICS_TEXTURE_SIZE = 32;
-export const PHYSICS_PARTICLE_CAPACITY = PHYSICS_TEXTURE_SIZE * PHYSICS_TEXTURE_SIZE;
+export const DETERMINISTIC_PHYSICS_TEXTURE_SIZE = 32;
+export const DETERMINISTIC_PHYSICS_PARTICLE_CAPACITY = DETERMINISTIC_PHYSICS_TEXTURE_SIZE * DETERMINISTIC_PHYSICS_TEXTURE_SIZE;
 /** Define exact frame numbers where the physics publishes milestone contracts. */
-export const PHYSICS_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
+export const DETERMINISTIC_PHYSICS_MILESTONE_FRAMES = [0, 30, 60, 90] as const;
 
 /** Define configurable parameters for the Deterministic Physics simulation. */
-export interface PhysicsBaselineSimulationParams {
+export interface DeterministicPhysicsParams {
   friction: number;
   boundsMin: [number, number, number];
   boundsMax: [number, number, number];
   deltaTime: number;
+  initialVelocityJitter?: number;
 }
 
-export const DEFAULT_PHYSICS_PARAMS: PhysicsBaselineSimulationParams = {
+export const DEFAULT_DETERMINISTIC_PHYSICS_PARAMS: DeterministicPhysicsParams = {
   friction: 0.1,
   boundsMin: [-10, -10, -10],
   boundsMax: [10, 10, 10],
   deltaTime: 1 / 60,
+  initialVelocityJitter: 0,
 };
 
 /** Define the state snapshot for the Deterministic Physics Baseline. */
-export type PhysicsBaselineSnapshot = {
+export type DeterministicPhysicsSnapshot = {
   frame: number;
   seed: string;
   particles: Array<{
@@ -50,24 +52,23 @@ export type PhysicsBaselineSnapshot = {
 
 /**
  * TRACEABILITY INTERFACE: Window integration points for contract verification.
- * These will be implemented in subsequent phases to support Playwright verification.
  */
 export interface DeterministicPhysicsTestApi {
-  /** Verification Obligation: GET_PHYSICS_BASELINE_CONTRACT_TEXT (Requirement Traceability) */
-  __GET_PHYSICS_BASELINE_CONTRACT_TEXT__?: (frame?: number) => Promise<string>;
-  /** Verification Obligation: RESET_PHYSICS_BASELINE_SIM_FOR_TEST (Requirement Traceability) */
-  __RESET_PHYSICS_BASELINE_SIM_FOR_TEST__?: () => Promise<void>;
-  /** Verification Obligation: STEP_PHYSICS_BASELINE_SIM (Requirement Traceability) */
-  __STEP_PHYSICS_BASELINE_SIM__?: (steps?: number) => Promise<void>;
+  /** Verification Obligation: GET_DETERMINISTIC_PHYSICS_CONTRACT_TEXT (Requirement Traceability) */
+  __GET_DETERMINISTIC_PHYSICS_CONTRACT_TEXT__?: (frame?: number) => Promise<string>;
+  /** Verification Obligation: RESET_DETERMINISTIC_PHYSICS_SIM_FOR_TEST (Requirement Traceability) */
+  __RESET_DETERMINISTIC_PHYSICS_SIM_FOR_TEST__?: () => Promise<void>;
+  /** Verification Obligation: STEP_DETERMINISTIC_PHYSICS_SIM (Requirement Traceability) */
+  __STEP_DETERMINISTIC_PHYSICS_SIM__?: (steps?: number) => Promise<void>;
 }
 
 /** 
  * ARCHITECTURE: Deterministic Physics Verification Utilities
  * These utilities ensure that the simulation state adheres to the canonical requirements.
  */
-export const PhysicsVerification = {
+export const DeterministicPhysicsVerification = {
   /** [SWARM-006] Verify that all particles are within the defined 3D volume. */
-  isWithinBounds: (p: { px: number; py: number; pz: number }, params: PhysicsBaselineSimulationParams): boolean => {
+  isWithinBounds: (p: { px: number; py: number; pz: number }, params: DeterministicPhysicsParams): boolean => {
     return (
       p.px >= params.boundsMin[0] && p.px <= params.boundsMax[0] &&
       p.py >= params.boundsMin[1] && p.py <= params.boundsMax[1] &&
@@ -93,7 +94,7 @@ function formatTwoDecimals(value: number) {
  *
  * This is used by Playwright contract tests to verify behavioral regression.
  */
-export function getPhysicsBaselineContractText(snapshot: PhysicsBaselineSnapshot, params: PhysicsBaselineSimulationParams = DEFAULT_PHYSICS_PARAMS) {
+export function getDeterministicPhysicsContractText(snapshot: DeterministicPhysicsSnapshot, params: DeterministicPhysicsParams = DEFAULT_DETERMINISTIC_PHYSICS_PARAMS) {
   const particleCount = snapshot.particles.length;
 
   let sumPX = 0, sumPY = 0, sumPZ = 0;
@@ -109,10 +110,10 @@ export function getPhysicsBaselineContractText(snapshot: PhysicsBaselineSnapshot
     sumVY += p.vy;
     sumVZ += p.vz;
     
-    if (!PhysicsVerification.isWithinBounds(p, params)) {
+    if (!DeterministicPhysicsVerification.isWithinBounds(p, params)) {
       outOfBoundsCount++;
     }
-    if (PhysicsVerification.isStationary(p)) {
+    if (DeterministicPhysicsVerification.isStationary(p)) {
       stationaryCount++;
     }
   });

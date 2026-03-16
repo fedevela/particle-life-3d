@@ -1,8 +1,9 @@
-import { GPUComputationRenderer, type Variable } from "three/examples/jsm/misc/GPUComputationRenderer.js";
+import { type Variable } from "three/examples/jsm/misc/GPUComputationRenderer.js";
 import * as THREE from "three";
 
 import swarmWalkComputeShader from "~/features/3d/shaders/swarm-walk.compute.frag";
 import { getSwarmWalkContractText } from "~/features/3d/swarm-walk-contract";
+import { BaseDeterministicGpuSimulation } from "~/features/3d/base-gpu-simulation";
 import { createLogger } from "~/lib/logger";
 
 export const SWARM_TEXTURE_SIZE = 32;
@@ -20,26 +21,20 @@ export type SwarmMilestone = {
 /**
  * A hardware-accelerated, deterministic simulation of autonomous peers (swarm).
  */
-export class DeterministicSwarmSimulation {
-  private readonly renderer: THREE.WebGLRenderer;
-  private readonly gpuCompute: GPUComputationRenderer;
+export class DeterministicSwarmSimulation extends BaseDeterministicGpuSimulation {
   private readonly positionVariable: Variable;
   private readonly velocityVariable: Variable;
 
-  private currentFrame = 0;
   private readonly seedText: string;
   private readonly seedValue: number;
   
-  private readonly milestoneContracts = new Map<number, string>();
   private readonly gpuReadbackBuffer = new Float32Array(SWARM_PEER_CAPACITY * 4);
 
   constructor(renderer: THREE.WebGLRenderer, seed: string) {
-    this.renderer = renderer;
+    super(renderer, SWARM_TEXTURE_SIZE);
     this.seedText = seed;
     this.seedValue = this.hashSeed(seed);
     
-    this.gpuCompute = new GPUComputationRenderer(SWARM_TEXTURE_SIZE, SWARM_TEXTURE_SIZE, this.renderer);
-
     const initialPosition = this.gpuCompute.createTexture();
     const initialVelocity = this.gpuCompute.createTexture();
     
@@ -89,15 +84,20 @@ export class DeterministicSwarmSimulation {
     this.gpuCompute.dispose();
   }
 
+  protected hashSeed(seed: string) {
+    let hash = 2166136261;
+    for (let index = 0; index < seed.length; index += 1) {
+      hash ^= seed.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return ((hash >>> 0) % 1000000) / 1000000;
+  }
+
   public getStateTextures() {
     return {
       position: this.gpuCompute.getCurrentRenderTarget(this.positionVariable).texture,
       velocity: this.gpuCompute.getCurrentRenderTarget(this.velocityVariable).texture,
     };
-  }
-
-  public getCurrentFrame() {
-    return this.currentFrame;
   }
 
   public reset() {
@@ -139,15 +139,6 @@ export class DeterministicSwarmSimulation {
     throw new Error(`Deterministic swarm contract for frame ${targetFrame} is not available yet.`);
   }
 
-  private hashSeed(seed: string) {
-    let hash = 2166136261;
-    for (let index = 0; index < seed.length; index += 1) {
-      hash ^= seed.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return ((hash >>> 0) % 1000000) / 1000000;
-  }
-
   private writeInitialState(posData: Float32Array, velData: Float32Array) {
     // Simple seeded RNG for initial positions
     let rngState = this.hashSeedUint(this.seedText);
@@ -186,15 +177,7 @@ export class DeterministicSwarmSimulation {
       return null;
     }
 
-    const target = this.gpuCompute.getCurrentRenderTarget(this.positionVariable);
-    this.renderer.readRenderTargetPixels(
-      target,
-      0,
-      0,
-      SWARM_TEXTURE_SIZE,
-      SWARM_TEXTURE_SIZE,
-      this.gpuReadbackBuffer,
-    );
+    this.readBuffer(this.positionVariable, this.gpuReadbackBuffer);
 
     const contractText = getSwarmWalkContractText({
       frame,

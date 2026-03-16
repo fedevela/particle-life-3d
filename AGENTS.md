@@ -8,6 +8,7 @@ This file applies to the entire repository.
 
 - `hello-world`: persisted sprite and camera-state flow backed by SQLite WASM in a Web Worker.
 - `hello-shader-world`: deterministic GPU simulation flow with text-based shader contract tests.
+- `deterministic-physics`: baseline GPU particle physics (friction, bounds, stationary start) with milestone contract tests.
 
 Agents should preserve those two behaviors and make changes through the existing architectural seams rather than bypassing them.
 

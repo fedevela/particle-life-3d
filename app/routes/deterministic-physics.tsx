@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import * as THREE from "three";
-import { DeterministicPhysicsSimulation, createPhysicsTestApi } from "~/features/3d/deterministic-physics-simulation";
+import { DeterministicPhysicsSimulation, createDeterministicPhysicsTestApi } from "~/features/3d/deterministic-physics-simulation";
 import { createLogger } from "~/lib/logger";
 
 const logger = createLogger("deterministic-physics-page");
@@ -33,11 +33,19 @@ export default function DeterministicPhysicsPage() {
     renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
     rendererRef.current = renderer;
 
-    const simulation = new DeterministicPhysicsSimulation(renderer, seed);
+    const params = {
+        friction: parseFloat(searchParams.get("friction") || "0.1"),
+        boundsMin: (searchParams.get("boundsMin") || "-10,-10,-10").split(",").map(Number) as [number, number, number],
+        boundsMax: (searchParams.get("boundsMax") || "10,10,10").split(",").map(Number) as [number, number, number],
+        deltaTime: parseFloat(searchParams.get("deltaTime") || (1 / 60).toString()),
+        initialVelocityJitter: parseFloat(searchParams.get("vJitter") || "0"),
+    };
+
+    const simulation = new DeterministicPhysicsSimulation(renderer, seed, params);
     simulationRef.current = simulation;
     
     // 2. [SWARM-002, SWARM-003, SWARM-006] Expose contract verification API to window
-    (window as any).__DETERMINISTIC_PHYSICS_TEST_API__ = createPhysicsTestApi(simulation);
+    (window as any).__DETERMINISTIC_PHYSICS_TEST_API__ = createDeterministicPhysicsTestApi(simulation);
     logger.info("Deterministic physics test API exposed to window.", { seed });
 
     // 3. Render Loop (Skeleton)
