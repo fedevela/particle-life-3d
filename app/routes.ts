@@ -7,5 +7,6 @@ export default [
     route("hello-world", "routes/hello-world.tsx"),
     route("hello-shader-world", "routes/hello-shader-world.tsx"),
     route("swarm-walk", "routes/swarm-walk.tsx"),
+    route("deterministic-physics", "routes/deterministic-physics.tsx"),
   ]),
 ] satisfies RouteConfig;
